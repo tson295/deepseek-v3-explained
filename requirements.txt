@@ -1,0 +1,4 @@
+# Dependencies để build index.html từ build_explained_html.py.
+# Pin chính xác để CI sinh ra index.html khớp với bản build trên máy.
+markdown==3.10.2
+beautifulsoup4==4.14.3

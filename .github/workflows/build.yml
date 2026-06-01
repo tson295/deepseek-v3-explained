@@ -1,0 +1,74 @@
+name: Build & cập nhật index.html
+
+# Mục tiêu: sửa nội dung trong build_explained_html.py (hoặc các .md) rồi push là
+# xong — Action sẽ tự chạy lại script, build lại index.html và commit ngược lên
+# main. GitHub Pages (deploy from branch) sẽ tự phát hành bản mới. Không cần đổi
+# cài đặt nào của repo.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'build_explained_html.py'
+      - '**/*.md'
+      - 'requirements.txt'
+      - '.github/workflows/build.yml'
+  pull_request:
+    paths:
+      - 'build_explained_html.py'
+      - '**/*.md'
+      - 'requirements.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-index-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cài Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cài dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build index.html từ nguồn
+        run: python build_explained_html.py
+
+      # Push lên main: nếu index.html khác bản trong repo thì commit lại.
+      # Lưu ý: commit do GITHUB_TOKEN tạo sẽ KHÔNG kích hoạt lại workflow,
+      # nên không có vòng lặp vô hạn.
+      - name: Commit lại index.html nếu thay đổi
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ -n "$(git status --porcelain index.html)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add index.html
+            git commit -m "Tự động build lại index.html [skip ci]"
+            git push
+            echo "Đã cập nhật index.html."
+          else
+            echo "index.html đã khớp nguồn — không cần commit."
+          fi
+
+      # Trên pull request: chỉ kiểm tra, báo lỗi nếu quên build lại index.html.
+      - name: Kiểm tra index.html đã được build lại
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -n "$(git status --porcelain index.html)" ]; then
+            echo "::error::index.html chưa được build lại từ nguồn. Chạy: python build_explained_html.py"
+            git --no-pager diff -- index.html | head -60
+            exit 1
+          fi
+          echo "index.html khớp nguồn."

@@ -1,0 +1,12 @@
+# Công cụ / cục bộ
+.claude/
+.vscode/
+__pycache__/
+*.pyc
+
+# Tài liệu nguồn nặng, không cần cho web
+arXiv-2412.19437v2/
+template/
+
+# Ảnh chụp tạm
+_shot_*.png

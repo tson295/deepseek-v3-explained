@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GIẢI THÍCH DEEPSEEK-V3 TỪ ĐẦU ĐẾN CUỐI</title>
+  <meta name="description" content="Giải thích DeepSeek-V3 từ đầu đến cuối: MoE, MLA, FP8, DualPipe, GRPO, YaRN — bối cảnh, cách hoạt động và cái giá phải trả của từng kỹ thuật.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="Giải thích DeepSeek-V3 từ đầu đến cuối">
+  <meta property="og:description" content="Bản viết lại theo kiểu giáo trình về kiến trúc và huấn luyện DeepSeek-V3.">
+  <meta property="og:type" content="article">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+      svg: { fontCache: 'global' },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #fbfbfc;
+      --surface: #ffffff;
+      --surface-2: #f4f4f6;
+      --surface-3: #ececef;
+      --ink: #18181b;
+      --text: #3f3f47;
+      --muted: #71717a;
+      --faint: #a1a1aa;
+      --line: #e6e6ea;
+      --line-2: #d6d6dc;
+      --accent: #4f46e5;
+      --accent-press: #4338ca;
+      --accent-soft: #eef0ff;
+      --accent-ring: rgba(79, 70, 229, .16);
+      --code-bg: #1b1b22;
+      --code-ink: #e7e7ef;
+      --shadow-sm: 0 1px 2px rgba(24, 24, 27, .06), 0 1px 1px rgba(24, 24, 27, .04);
+      --shadow: 0 4px 24px -8px rgba(24, 24, 27, .16);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --maxw: 1200px;
+      --content: 768px;
+    }
+
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #09090b;
+      --surface: #111114;
+      --surface-2: #19191d;
+      --surface-3: #212127;
+      --ink: #fafafa;
+      --text: #c9c9d1;
+      --muted: #8e8e98;
+      --faint: #6a6a74;
+      --line: #26262b;
+      --line-2: #36363d;
+      --accent: #8b8cf9;
+      --accent-press: #a6a7fb;
+      --accent-soft: rgba(129, 140, 248, .12);
+      --accent-ring: rgba(139, 140, 249, .24);
+      --code-bg: #0c0c10;
+      --code-ink: #e3e3ec;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+      --shadow: 0 8px 40px -12px rgba(0, 0, 0, .6);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      font-size: 16.5px;
+      line-height: 1.72;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    ::selection { background: var(--accent-ring); }
+    a { color: var(--accent); }
+
+    .progress { position: fixed; inset: 0 0 auto; height: 2px; z-index: 60; pointer-events: none; }
+    .progress span { display: block; height: 100%; width: 0; background: var(--accent); }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 78%, transparent);
+      backdrop-filter: blur(12px) saturate(1.4);
+      -webkit-backdrop-filter: blur(12px) saturate(1.4);
+    }
+    .topbar-inner {
+      width: min(var(--maxw), calc(100% - 48px));
+      margin: 0 auto;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; min-width: 0; }
+    .mark {
+      width: 34px;
+      height: 34px;
+      flex: none;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: linear-gradient(150deg, var(--accent), var(--accent-press));
+      color: #fff;
+      font-weight: 800;
+      font-size: .82rem;
+      letter-spacing: -.02em;
+      box-shadow: var(--shadow-sm);
+    }
+    .brand-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.18; }
+    .brand-text strong { font-size: .96rem; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+    .brand-text span { font-size: .78rem; color: var(--muted); }
+    .toolbar { display: flex; gap: 6px; align-items: center; }
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+      text-decoration: none;
+      transition: color .15s ease, border-color .15s ease, background .15s ease;
+    }
+    .icon-btn:hover { color: var(--ink); border-color: var(--line-2); background: var(--surface-2); }
+    .icon-btn svg { width: 17px; height: 17px; display: block; }
+    .icon-sun { display: none; }
+    [data-theme="dark"] .icon-moon { display: none; }
+    [data-theme="dark"] .icon-sun { display: block; }
+
+    .layout {
+      width: min(var(--maxw), calc(100% - 48px));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+      gap: 56px;
+      padding: 0 0 96px;
+    }
+    main { min-width: 0; grid-column: 2; grid-row: 1; }
+    .sidebar { grid-column: 1; grid-row: 1; }
+
+    .sidebar-inner {
+      position: sticky;
+      top: 84px;
+      max-height: calc(100vh - 108px);
+      overflow: auto;
+      padding-right: 6px;
+    }
+    .sidebar-inner::-webkit-scrollbar { width: 8px; }
+    .sidebar-inner::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px; }
+    .sidebar-inner::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 0 14px;
+      padding: 0 10px;
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: var(--faint);
+    }
+    .sidebar-title .count {
+      display: grid;
+      place-items: center;
+      min-width: 22px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: .7rem;
+    }
+    .outline-links { display: flex; flex-direction: column; gap: 1px; border-left: 1px solid var(--line); }
+    .outline-links a {
+      position: relative;
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 9px;
+      align-items: start;
+      margin-left: -1px;
+      padding: 7px 10px 7px 14px;
+      border-left: 2px solid transparent;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: .855rem;
+      line-height: 1.4;
+      border-radius: 0 7px 7px 0;
+      transition: color .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .outline-links a > span { color: var(--faint); font-size: .76rem; font-weight: 600; font-variant-numeric: tabular-nums; padding-top: .08em; }
+    .outline-links a > em { font-style: normal; }
+    .outline-links a:hover { color: var(--ink); background: var(--surface-2); }
+    .outline-links a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+    .outline-links a.active > span { color: var(--accent); }
+
+    .hero { padding: 60px 0 38px; border-bottom: 1px solid var(--line); margin-bottom: 42px; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-size: .76rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .eyebrow::before { content: ""; width: 20px; height: 1.5px; background: var(--accent); border-radius: 2px; }
+    .hero h1 {
+      margin: 18px 0 0;
+      font-size: clamp(2.05rem, 4.6vw, 3.35rem);
+      line-height: 1.07;
+      letter-spacing: -.028em;
+      font-weight: 800;
+      color: var(--ink);
+      max-width: 17ch;
+    }
+    .lead { margin: 18px 0 0; max-width: 60ch; font-size: clamp(1.02rem, 1.4vw, 1.18rem); line-height: 1.6; color: var(--muted); }
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      margin: 36px 0 0;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+    .stats > div { flex: 1 1 0; min-width: 150px; padding: 16px 20px; border-right: 1px solid var(--line); }
+    .stats > div:last-child { border-right: 0; }
+    .stats dt { font-size: clamp(1.2rem, 2vw, 1.5rem); font-weight: 800; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .stats dd { margin: 6px 0 0; font-size: .82rem; line-height: 1.45; color: var(--muted); }
+
+    .note {
+      display: flex;
+      gap: 13px;
+      align-items: flex-start;
+      padding: 15px 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: .92rem;
+      line-height: 1.6;
+      margin-bottom: 44px;
+      box-shadow: var(--shadow-sm);
+    }
+    .note-ico { flex: none; width: 20px; height: 20px; margin-top: 2px; color: var(--accent); }
+    .note strong { color: var(--ink); font-weight: 650; }
+
+    .article { max-width: var(--content); }
+    .article > h1:first-child { display: none; }
+    .article h2, .article h3, .article h4 { color: var(--ink); letter-spacing: -.018em; scroll-margin-top: 84px; }
+    .article h2 {
+      margin: 3.6rem 0 1.3rem;
+      padding-top: 2.3rem;
+      border-top: 1px solid var(--line);
+      font-size: clamp(1.5rem, 2.6vw, 1.95rem);
+      line-height: 1.2;
+      font-weight: 750;
+    }
+    .article h2:first-of-type { margin-top: .8rem; padding-top: 0; border-top: 0; }
+    .article h3 { margin: 2.4rem 0 .8rem; font-size: clamp(1.12rem, 1.7vw, 1.34rem); line-height: 1.3; font-weight: 650; }
+    .article h4 { margin: 1.9rem 0 .6rem; font-size: 1.05rem; font-weight: 650; }
+    .article p, .article ul, .article ol, .article blockquote, .article pre, .article .table-wrap, .article .math-block { margin: 0 0 1.2rem; }
+    .article p { color: var(--text); }
+    .article a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-ring); transition: border-color .15s ease; }
+    .article a:hover { border-bottom-color: var(--accent); }
+    .article strong { color: var(--ink); font-weight: 650; }
+    .article ul, .article ol { padding-left: 1.3rem; color: var(--text); }
+    .article li { margin: .4rem 0; }
+    .article li::marker { color: var(--faint); }
+
+    .article blockquote { margin-left: 0; margin-right: 0; padding: 2px 0 2px 20px; border-left: 3px solid var(--accent); color: var(--muted); }
+    .article blockquote p { color: var(--muted); }
+    .article blockquote > :last-child { margin-bottom: 0; }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
+    .data-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: .9rem; }
+    .data-table th, .data-table td { padding: 11px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    .data-table thead th { background: var(--surface-2); color: var(--ink); font-weight: 650; font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; border-bottom: 1px solid var(--line-2); }
+    .data-table td { color: var(--text); }
+    .data-table tbody tr:last-child td { border-bottom: 0; }
+    .data-table tbody tr:hover td { background: var(--surface-2); }
+
+    .article code {
+      font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: .85em;
+      padding: .14em .42em;
+      border-radius: 5px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      color: var(--ink);
+    }
+    .article pre {
+      overflow-x: auto;
+      padding: 18px 20px;
+      border: 1px solid var(--line-2);
+      border-radius: var(--radius);
+      background: var(--code-bg);
+      color: var(--code-ink);
+      font-size: .86rem;
+      line-height: 1.6;
+    }
+    .article pre code { padding: 0; border: 0; background: transparent; color: inherit; font-size: 1em; }
+    .article hr { height: 1px; border: 0; background: var(--line); margin: 2.6rem 0; }
+
+    .math-block {
+      overflow-x: auto;
+      padding: 14px 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      text-align: center;
+      color: var(--ink);
+      box-shadow: var(--shadow-sm);
+    }
+    mjx-container { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+    mjx-container[display="true"] { margin: 0; }
+
+    .page-footer {
+      max-width: var(--content);
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+    .page-footer strong { color: var(--text); font-weight: 600; }
+    .page-footer a { color: var(--accent); text-decoration: none; }
+    .page-footer a:hover { text-decoration: underline; }
+    .page-footer .to-top { white-space: nowrap; font-weight: 600; }
+
+    .mobile-outline { display: none; margin-bottom: 36px; }
+    .mobile-outline details { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; box-shadow: var(--shadow-sm); }
+    .mobile-outline summary { cursor: pointer; padding: 14px 18px; font-weight: 650; color: var(--ink); list-style: none; display: flex; justify-content: space-between; align-items: center; }
+    .mobile-outline summary::-webkit-details-marker { display: none; }
+    .mobile-outline summary::after { content: "\\203A"; transform: rotate(90deg); color: var(--muted); transition: transform .2s ease; }
+    .mobile-outline details[open] summary { border-bottom: 1px solid var(--line); }
+    .mobile-outline details[open] summary::after { transform: rotate(-90deg); }
+    .mobile-outline .outline-links { padding: 8px; border-left: 0; }
+    .mobile-outline .outline-links a { border-left: 0; border-radius: 7px; }
+
+    @media (max-width: 1080px) {
+      .layout { grid-template-columns: 1fr; gap: 0; }
+      .sidebar { display: none; }
+      main { grid-column: 1; }
+      .mobile-outline { display: block; }
+      .article { max-width: none; }
+      .page-footer { max-width: none; }
+    }
+    @media (max-width: 680px) {
+      .topbar-inner, .layout { width: min(calc(100% - 32px), 100%); }
+      body { font-size: 16px; }
+      .brand-text span { display: none; }
+      .hero { padding: 38px 0 30px; }
+      .stats > div { flex-basis: 100%; border-right: 0; border-bottom: 1px solid var(--line); }
+      .stats > div:last-child { border-bottom: 0; }
+      .article h2 { margin-top: 2.8rem; }
+    }
+    @media print {
+      body { background: #fff; color: #000; font-size: 11pt; }
+      .progress, .topbar, .sidebar, .mobile-outline, .page-footer { display: none; }
+      .layout { display: block; width: 100%; padding: 0; }
+      main { grid-column: 1; }
+      .hero { border: 0; padding: 0; margin-bottom: 1.2rem; }
+      .stats { box-shadow: none; }
+      .article { max-width: none; }
+      .article > h1:first-child { display: block; }
+      .article h2 { break-after: avoid; }
+      .article a { color: #000; border: 0; }
+    }
+</style>
+</head>
+<body>
+  <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#top">
+        <span class="mark" aria-hidden="true">V3</span>
+        <span class="brand-text">
+          <strong>DeepSeek-V3</strong>
+          <span>Giải thích kỹ thuật</span>
+        </span>
+      </a>
+      <div class="toolbar">
+        <a class="icon-btn" href="https://github.com/tson295/deepseek-v3-explained" target="_blank" rel="noopener" title="Mã nguồn trên GitHub" aria-label="Mã nguồn trên GitHub">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        </a>
+        <button class="icon-btn" id="theme-toggle" type="button" title="Đổi giao diện sáng/tối" aria-label="Đổi giao diện sáng tối">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </button>
+        <button class="icon-btn" id="top-button" type="button" title="Lên đầu trang" aria-label="Lên đầu trang">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Mục lục">
+      <div class="sidebar-inner">
+        <p class="sidebar-title">Nội dung <span class="count">14</span></p>
+        <nav class="outline-links"><a href="#0-truoc-het-deepseek-v3-ang-co-giai-bai-toan-gi"><span>01</span><em>Trước hết: DeepSeek-V3 đang cố giải bài toán gì?</em></a>
+<a href="#1-vi-sao-co-con-so-671b-37b"><span>02</span><em>Vì sao có con số 671B / 37B?</em></a>
+<a href="#2-mla-vi-sao-attention-can-nen-kv-cache"><span>03</span><em>MLA: vì sao attention cần nén KV cache?</em></a>
+<a href="#3-deepseekmoe-gating-router-chon-expert-nhu-the-nao"><span>04</span><em>DeepSeekMoE gating: router chọn expert như thế nào?</em></a>
+<a href="#4-auxiliary-loss-free-vi-sao-phai-can-bang-tai-expert"><span>05</span><em>Auxiliary-loss-free: vì sao phải cân bằng tải expert?</em></a>
+<a href="#5-sequence-wise-balance-loss-neu-a-co-bias-vi-sao-van-can-loss-phu"><span>06</span><em>Sequence-wise balance loss: nếu đã có bias, vì sao vẫn cần loss phụ?</em></a>
+<a href="#6-mtp-vi-sao-du-oan-them-token-tuong-lai-giup-train"><span>07</span><em>MTP: vì sao dự đoán thêm token tương lai giúp train?</em></a>
+<a href="#7-fp8-vi-sao-dung-so-8-bit-ma-khong-lam-training-sap"><span>08</span><em>FP8: vì sao dùng số 8-bit mà không làm training sập?</em></a>
+<a href="#8-dualpipe-vi-sao-pipeline-can-hai-chieu"><span>09</span><em>DualPipe: vì sao pipeline cần hai chiều?</em></a>
+<a href="#9-all-to-all-vi-sao-moe-bi-nghen-mang"><span>10</span><em>All-to-all: vì sao MoE bị nghẽn mạng?</em></a>
+<a href="#10-grpo-vi-sao-bo-critic-trong-rl"><span>11</span><em>GRPO: vì sao bỏ critic trong RL?</em></a>
+<a href="#11-chi-phi-huan-luyen-cac-con-so-co-khop-khong"><span>12</span><em>Chi phí huấn luyện: các con số có khớp không?</em></a>
+<a href="#12-long-context-yarn-vi-sao-mo-tu-4k-len-128k-khong-chi-la-tang-so"><span>13</span><em>Long context YaRN: vì sao mở từ 4K lên 128K không chỉ là tăng số?</em></a>
+<a href="#13-ket-luan-vi-sao-cac-ky-thuat-nay-phai-i-cung-nhau"><span>14</span><em>Kết luận: vì sao các kỹ thuật này phải đi cùng nhau?</em></a></nav>
+      </div>
+    </aside>
+
+    <main id="top">
+      <header class="hero">
+        <span class="eyebrow">Phân tích kiến trúc &amp; huấn luyện</span>
+        <h1>DeepSeek-V3, giải thích từ đầu đến cuối</h1>
+        <p class="lead">Một bản viết lại theo kiểu giáo trình: mỗi kỹ thuật đều có bối cảnh, lý do xuất hiện, cách hoạt động, vì sao tốt hơn cách cũ và cái giá phải trả.</p>
+        <dl class="stats" aria-label="Thông số chính">
+          <div><dt>671B / 37B</dt><dd>Tổng tham số / kích hoạt mỗi token</dd></div>
+          <div><dt>56.9&times;</dt><dd>Mức giảm KV cache của MLA so với MHA</dd></div>
+          <div><dt>FP8</dt><dd>Mixed precision khi huấn luyện quy mô lớn</dd></div>
+          <div><dt>128K</dt><dd>Context sau khi mở rộng bằng YaRN</dd></div>
+        </dl>
+      </header>
+
+      <div class="note">
+        <svg class="note-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div><strong>Đây là bản viết lại phần giải thích, không chỉ convert Markdown.</strong> Trang gồm 14 phần chính, 62 mục con, 5 bảng và 50 khối công thức. Công thức LaTeX được bảo vệ trước khi render để Markdown không làm hỏng.</div>
+      </div>
+
+      <div class="mobile-outline">
+        <details>
+          <summary>Mục lục nhanh</summary>
+          <nav class="outline-links"><a href="#0-truoc-het-deepseek-v3-ang-co-giai-bai-toan-gi"><span>01</span><em>Trước hết: DeepSeek-V3 đang cố giải bài toán gì?</em></a>
+<a href="#1-vi-sao-co-con-so-671b-37b"><span>02</span><em>Vì sao có con số 671B / 37B?</em></a>
+<a href="#2-mla-vi-sao-attention-can-nen-kv-cache"><span>03</span><em>MLA: vì sao attention cần nén KV cache?</em></a>
+<a href="#3-deepseekmoe-gating-router-chon-expert-nhu-the-nao"><span>04</span><em>DeepSeekMoE gating: router chọn expert như thế nào?</em></a>
+<a href="#4-auxiliary-loss-free-vi-sao-phai-can-bang-tai-expert"><span>05</span><em>Auxiliary-loss-free: vì sao phải cân bằng tải expert?</em></a>
+<a href="#5-sequence-wise-balance-loss-neu-a-co-bias-vi-sao-van-can-loss-phu"><span>06</span><em>Sequence-wise balance loss: nếu đã có bias, vì sao vẫn cần loss phụ?</em></a>
+<a href="#6-mtp-vi-sao-du-oan-them-token-tuong-lai-giup-train"><span>07</span><em>MTP: vì sao dự đoán thêm token tương lai giúp train?</em></a>
+<a href="#7-fp8-vi-sao-dung-so-8-bit-ma-khong-lam-training-sap"><span>08</span><em>FP8: vì sao dùng số 8-bit mà không làm training sập?</em></a>
+<a href="#8-dualpipe-vi-sao-pipeline-can-hai-chieu"><span>09</span><em>DualPipe: vì sao pipeline cần hai chiều?</em></a>
+<a href="#9-all-to-all-vi-sao-moe-bi-nghen-mang"><span>10</span><em>All-to-all: vì sao MoE bị nghẽn mạng?</em></a>
+<a href="#10-grpo-vi-sao-bo-critic-trong-rl"><span>11</span><em>GRPO: vì sao bỏ critic trong RL?</em></a>
+<a href="#11-chi-phi-huan-luyen-cac-con-so-co-khop-khong"><span>12</span><em>Chi phí huấn luyện: các con số có khớp không?</em></a>
+<a href="#12-long-context-yarn-vi-sao-mo-tu-4k-len-128k-khong-chi-la-tang-so"><span>13</span><em>Long context YaRN: vì sao mở từ 4K lên 128K không chỉ là tăng số?</em></a>
+<a href="#13-ket-luan-vi-sao-cac-ky-thuat-nay-phai-i-cung-nhau"><span>14</span><em>Kết luận: vì sao các kỹ thuật này phải đi cùng nhau?</em></a></nav>
+        </details>
+      </div>
+
+      <article class="article" id="article">
+<h1 id="giai-thich-deepseek-v3-tu-au-en-cuoi">GIẢI THÍCH DEEPSEEK-V3 TỪ ĐẦU ĐẾN CUỐI</h1>
+<blockquote>
+<p>Mục tiêu của trang này không phải là chép lại công thức. Mục tiêu là: nếu bạn chưa biết MoE, attention, FP8, pipeline hay RLHF là gì, bạn vẫn có thể đi từ ý tưởng gốc đến lý do vì sao DeepSeek-V3 chọn từng kỹ thuật.</p>
+<p>Nguyên tắc viết lại: giữ đầy đủ các con số và công thức quan trọng của bản Markdown gốc, nhưng mỗi ý đều được đặt vào bối cảnh: <strong>vấn đề là gì</strong>, <strong>cách cũ kẹt ở đâu</strong>, <strong>DeepSeek làm gì</strong>, <strong>vì sao cách đó hợp lý</strong>, và <strong>đổi lại phải trả giá gì</strong>.</p>
+</blockquote>
+<h2 class="section-heading" data-section-index="01" id="0-truoc-het-deepseek-v3-ang-co-giai-bai-toan-gi">0. Trước hết: DeepSeek-V3 đang cố giải bài toán gì?</h2>
+<p>Một mô hình ngôn ngữ lớn không chỉ cần “thông minh”. Nó còn phải <strong>train được</strong>, <strong>chạy được</strong>, và <strong>không quá đắt</strong>. Khi mô hình lên hàng trăm tỉ tham số, ba thứ sau thường va vào nhau:</p>
+<ul>
+<li><strong>Dung lượng kiến thức</strong>: mô hình càng nhiều tham số thì càng có nhiều “chỗ” để lưu pattern ngôn ngữ, toán, code, tri thức.</li>
+<li><strong>Chi phí tính toán</strong>: mỗi token đi qua càng nhiều tham số thì càng tốn GPU.</li>
+<li><strong>Bộ nhớ và giao tiếp</strong>: mô hình càng lớn thì càng khó nhét lên GPU; MoE còn phải gửi token qua mạng tới đúng expert.</li>
+</ul>
+<p>DeepSeek-V3 chọn hướng <strong>đồng thiết kế</strong>: không có một mẹo duy nhất cứu tất cả. Mỗi kỹ thuật xử lý một nút thắt:</p>
+<table class="data-table">
+<thead>
+<tr>
+<th>Nút thắt</th>
+<th>Nếu làm theo cách đơn giản sẽ gặp gì?</th>
+<th>DeepSeek-V3 dùng gì?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Muốn nhiều tham số nhưng compute không nổ</td>
+<td>Dense model 671B sẽ quá đắt mỗi token</td>
+<td>MoE thưa: 671B tổng, 37B kích hoạt</td>
+</tr>
+<tr>
+<td>Context dài làm KV cache phình to</td>
+<td>MHA 128K context cần hàng trăm GB cache</td>
+<td>MLA nén KV cache</td>
+</tr>
+<tr>
+<td>MoE dễ lệch tải expert</td>
+<td>Một vài expert quá tải, GPU khác chờ</td>
+<td>Auxiliary-loss-free bias + loss rất nhẹ</td>
+</tr>
+<tr>
+<td>Train cần nhiều tín hiệu học hơn</td>
+<td>Next-token prediction chỉ dạy một bước</td>
+<td>MTP dự đoán thêm token tương lai</td>
+</tr>
+<tr>
+<td>Train quá đắt nếu dùng BF16 hết</td>
+<td>BF16 tốn bộ nhớ và băng thông</td>
+<td>FP8 mixed precision có kiểm soát</td>
+</tr>
+<tr>
+<td>Pipeline nhiều GPU bị chờ</td>
+<td>Bubble làm GPU rảnh vô ích</td>
+<td>DualPipe chồng lấp tính toán/giao tiếp</td>
+</tr>
+<tr>
+<td>RLHF cần critic quá lớn</td>
+<td>PPO cần value model gần bằng policy</td>
+<td>GRPO dùng baseline từ nhóm output</td>
+</tr>
+<tr>
+<td>Muốn context 128K</td>
+<td>RoPE gốc không quen vị trí xa</td>
+<td>YaRN mở rộng context theo giai đoạn</td>
+</tr>
+</tbody>
+</table>
+<p>Các hằng số sẽ xuất hiện xuyên suốt:</p>
+<table class="data-table">
+<thead>
+<tr>
+<th>Ký hiệu</th>
+<th>Nghĩa</th>
+<th>Giá trị trong V3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$L$</td>
+<td>số lớp Transformer</td>
+<td>61</td>
+</tr>
+<tr>
+<td>$d$</td>
+<td>hidden dimension</td>
+<td>7168</td>
+</tr>
+<tr>
+<td>$n_h$</td>
+<td>số attention head</td>
+<td>128</td>
+</tr>
+<tr>
+<td>$d_h$</td>
+<td>chiều mỗi head</td>
+<td>128</td>
+</tr>
+<tr>
+<td>$d_c$</td>
+<td>chiều nén KV trong MLA</td>
+<td>512</td>
+</tr>
+<tr>
+<td>$d_c'$</td>
+<td>chiều nén query trong MLA</td>
+<td>1536</td>
+</tr>
+<tr>
+<td>$d_h^R$</td>
+<td>chiều nhánh RoPE tách riêng</td>
+<td>64</td>
+</tr>
+<tr>
+<td>$N_s$</td>
+<td>số shared expert</td>
+<td>1</td>
+</tr>
+<tr>
+<td>$N_r$</td>
+<td>số routed expert</td>
+<td>256</td>
+</tr>
+<tr>
+<td>$K_r$</td>
+<td>routed expert được chọn mỗi token</td>
+<td>8</td>
+</tr>
+<tr>
+<td>—</td>
+<td>intermediate dimension mỗi expert</td>
+<td>2048</td>
+</tr>
+<tr>
+<td>$V$</td>
+<td>vocab size</td>
+<td>128K</td>
+</tr>
+<tr>
+<td>—</td>
+<td>tổng tham số / tham số kích hoạt</td>
+<td>671B / 37B</td>
+</tr>
+</tbody>
+</table>
+<h3 id="ba-khai-niem-nen-phai-nam">Ba khái niệm nền phải nắm</h3>
+<p><strong>Tham số</strong> là các trọng số mô hình học được. Nhiều tham số hơn thường nghĩa là mô hình có nhiều dung lượng hơn, nhưng không tự động nghĩa là mọi tham số đều được dùng cho mọi token.</p>
+<p><strong>Kích hoạt</strong> nghĩa là phần mô hình thật sự chạy khi xử lý một token. Trong dense Transformer, gần như toàn bộ lớp đều chạy cho mọi token. Trong MoE thưa, chỉ một số expert chạy.</p>
+<p><strong>Cache</strong> là bộ nhớ lưu lại thứ đã tính ở các token trước. Khi sinh token thứ 1000, mô hình không muốn tính lại key/value của 999 token cũ, nên lưu chúng vào KV cache. Context càng dài, cache càng lớn.</p>
+<p>Nếu nhớ ba ý này, bạn sẽ hiểu vì sao DeepSeek-V3 liên tục tách “có nhiều” khỏi “phải tính nhiều”: nhiều tham số nhưng ít tham số kích hoạt; context dài nhưng KV cache nhỏ; train thêm mục tiêu phụ nhưng deploy có thể bỏ module phụ.</p>
+<h2 class="section-heading" data-section-index="02" id="1-vi-sao-co-con-so-671b-37b">1. Vì sao có con số 671B / 37B?</h2>
+<p>Nghe “671B tham số nhưng chỉ kích hoạt 37B mỗi token” rất dễ hiểu sai thành “mô hình chỉ dùng một phần nhỏ nên phần còn lại vô nghĩa”. Không phải vậy. Cách đúng để nhìn là: <strong>671B là kho chuyên gia</strong>, còn <strong>37B là nhóm chuyên gia được gọi cho một token cụ thể</strong>.</p>
+<h3 id="cach-cu-dense-model">Cách cũ: dense model</h3>
+<p>Ở mô hình dense, mỗi token đi qua gần như toàn bộ tham số của mỗi lớp. Nếu làm dense 671B, mỗi token phải dùng compute tương ứng với 671B tham số. Điều này mạnh nhưng cực đắt:</p>
+<ul>
+<li>Train chậm hơn vì mỗi token phải nhân ma trận khổng lồ.</li>
+<li>Inference đắt hơn vì mỗi token sinh ra đều đi qua toàn bộ mô hình.</li>
+<li>Bộ nhớ GPU vẫn phải chứa toàn bộ tham số.</li>
+</ul>
+<p>Cách này hợp lý nếu có ngân sách cực lớn và muốn hệ thống đơn giản. Nhưng nếu mục tiêu là model frontier với chi phí thấp hơn, dense 671B không phải lựa chọn tốt.</p>
+<h3 id="deepseek-chon-moe-thua">DeepSeek chọn MoE thưa</h3>
+<p>MoE, viết tắt của Mixture-of-Experts, thay một FFN khổng lồ bằng nhiều expert nhỏ hơn. Mỗi token không đi qua tất cả expert, mà router chọn vài expert phù hợp nhất.</p>
+<p>Trong DeepSeek-V3:</p>
+<ul>
+<li>3 lớp đầu là dense.</li>
+<li>58 lớp còn lại là MoE.</li>
+<li>Mỗi lớp MoE có 256 routed expert và 1 shared expert.</li>
+<li>Mỗi token đi qua 8 routed expert + 1 shared expert.</li>
+</ul>
+<p>Vì vậy, mô hình có rất nhiều expert để lưu tri thức, nhưng một token chỉ gọi một nhóm nhỏ expert.</p>
+<h3 id="tinh-tham-so-cua-mot-expert">Tính tham số của một expert</h3>
+<p>Mỗi expert là FFN kiểu SwiGLU, có ba ma trận chính: <code>gate</code>, <code>up</code>, <code>down</code>. Với $d=7168$ và $d_{ff}=2048$:</p>
+<p class="math-block">$$\text{params/expert} = 3 \times d \times d_{ff} = 3 \times 7168 \times 2048 \approx 44.0\text{ triệu}$$</p>
+<p>Vì mỗi lớp MoE có 256 routed expert:</p>
+<p class="math-block">$$\text{params routed/lớp} = 256 \times 44.0\text{M} \approx 11.3\text{B}$$</p>
+<p>Với 58 lớp MoE:</p>
+<p class="math-block">$$11.3\text{B} \times 58 \approx 654\text{B}$$</p>
+<p>Cộng thêm attention, embedding, 3 lớp dense, shared experts và các phần còn lại thì ra khoảng <strong>671B tham số</strong>.</p>
+<h3 id="tai-sao-moi-token-chi-kich-hoat-khoang-37b">Tại sao mỗi token chỉ kích hoạt khoảng 37B?</h3>
+<p>Mỗi token chỉ chạy 8 routed expert và 1 shared expert:</p>
+<p class="math-block">$$\text{params kích hoạt/lớp MoE} = 9 \times 44.0\text{M} \approx 396\text{M}$$</p>
+<p>Qua 58 lớp MoE:</p>
+<p class="math-block">$$396\text{M} \times 58 \approx 23\text{B}$$</p>
+<p>Cộng thêm attention, embedding và dense layers thì thành khoảng <strong>37B tham số kích hoạt mỗi token</strong>.</p>
+<h3 id="vi-sao-cach-nay-tot-hon-dense-cung-kich-thuoc">Vì sao cách này tốt hơn dense cùng kích thước?</h3>
+<p>MoE tách hai thứ vốn bị trói vào nhau trong dense model:</p>
+<ul>
+<li><strong>Dung lượng lưu tri thức</strong> gần với model 671B, vì tổng tham số thật là 671B.</li>
+<li><strong>Chi phí xử lý mỗi token</strong> gần với model nhỏ hơn nhiều, vì chỉ 37B tham số được kích hoạt.</li>
+</ul>
+<p>Nói ngắn: dense model bắt bạn “mở cả thư viện” cho mỗi câu hỏi; MoE cho bạn gọi đúng vài chuyên gia liên quan.</p>
+<h3 id="vi-sao-khong-chon-it-expert-hon-hoac-kich-hoat-nhieu-expert-hon">Vì sao không chọn ít expert hơn hoặc kích hoạt nhiều expert hơn?</h3>
+<p>Nếu ít expert hơn, mô hình mất dung lượng chuyên môn hóa. Mỗi expert phải học quá nhiều thứ, giống một người phải làm mọi nghề.</p>
+<p>Nếu kích hoạt quá nhiều expert, chất lượng có thể tăng nhưng compute và giao tiếp tăng theo. Khi token phải đi tới nhiều expert trên nhiều GPU, chi phí mạng sẽ ăn mất lợi ích.</p>
+<p>Con số 256 routed expert và top-8 là điểm cân bằng: đủ nhiều expert để chuyên môn hóa, nhưng mỗi token chỉ dùng một phần nhỏ để giữ chi phí thấp.</p>
+<h3 id="oi-lai-la-gi">Đổi lại là gì?</h3>
+<p>MoE không miễn phí. Nó đổi compute lấy độ phức tạp hệ thống:</p>
+<ul>
+<li>Phải chứa toàn bộ 671B tham số trong bộ nhớ phân tán.</li>
+<li>Phải có router chọn expert đúng.</li>
+<li>Phải cân bằng tải, nếu không một số expert/GPU quá tải.</li>
+<li>Phải tối ưu all-to-all communication, vì token có thể phải đi qua mạng tới expert.</li>
+</ul>
+<p>Vì vậy các phần sau của DeepSeek-V3 gần như đều là để “trả nợ kỹ thuật” cho quyết định dùng MoE lớn.</p>
+<h2 class="section-heading" data-section-index="03" id="2-mla-vi-sao-attention-can-nen-kv-cache">2. MLA: vì sao attention cần nén KV cache?</h2>
+<p>Attention giúp token hiện tại nhìn lại các token trước. Khi sinh văn bản, mô hình đã xử lý các token cũ rồi, nên nó lưu key/value của chúng vào <strong>KV cache</strong>. Vấn đề: context càng dài thì KV cache càng phình.</p>
+<h3 id="cach-cu-multi-head-attention-ay-u">Cách cũ: Multi-Head Attention đầy đủ</h3>
+<p>Trong MHA chuẩn, mỗi token ở mỗi lớp cần cache:</p>
+<p class="math-block">$$K + V = 2 \times n_h \times d_h = 2 \times 128 \times 128 = 32768\text{ phần tử}$$</p>
+<p>Với context 128K và 61 lớp, chỉ riêng KV cache BF16 đã khoảng:</p>
+<p class="math-block">$$32768 \times 61 \times 128000 \times 2 \approx 512\text{ GB}$$</p>
+<p>512GB chỉ cho KV cache là bất khả thi với một GPU 80GB, và còn rất nặng ngay cả khi phân tán.</p>
+<h3 id="vi-sao-khong-dung-mqagqa-cho-on-gian">Vì sao không dùng MQA/GQA cho đơn giản?</h3>
+<p>MQA/GQA giảm cache bằng cách chia sẻ key/value giữa nhiều head. Cách này hiệu quả, nhưng nó giảm độ tự do của attention: nhiều head phải nhìn bằng cùng key/value hơn. Khi model lớn và yêu cầu chất lượng cao, giảm quá mạnh có thể làm mất thông tin.</p>
+<p>DeepSeek muốn cache nhỏ nhưng vẫn giữ chất lượng gần MHA. Vì vậy họ chọn cách nén hạng thấp: không ép các head dùng chung KV thô, mà lưu một vector tiềm ẩn nhỏ rồi giải nén khi cần.</p>
+<h3 id="mla-lam-gi">MLA làm gì?</h3>
+<p>MLA lưu key/value dưới dạng vector nén:</p>
+<p class="math-block">$$\mathbf{c}_t^{KV} = W^{DKV}\mathbf{h}_t$$</p>
+<p>Ở đây:</p>
+<ul>
+<li>$\mathbf{h}_t \in \mathbb{R}^{7168}$ là hidden state của token.</li>
+<li>$W^{DKV} \in \mathbb{R}^{512 \times 7168}$ nén hidden state xuống 512 chiều.</li>
+<li>$\mathbf{c}_t^{KV} \in \mathbb{R}^{512}$ là thứ chính cần cache.</li>
+</ul>
+<p>Khi cần key/value đầy đủ, mô hình giải nén:</p>
+<p class="math-block">$$\mathbf{k}_t^C = W^{UK}\mathbf{c}_t^{KV}, \qquad \mathbf{v}_t^C = W^{UV}\mathbf{c}_t^{KV}$$</p>
+<p>Điểm quan trọng: cache lưu vector nén, không lưu toàn bộ $K,V$ đã giải nén.</p>
+<h3 id="vi-sao-phai-tach-rope">Vì sao phải tách RoPE?</h3>
+<p>RoPE đưa thông tin vị trí vào query/key bằng phép quay phụ thuộc vị trí. Nếu trộn RoPE vào vector nén chung, phép giải nén sẽ bị phụ thuộc vị trí và khó “absorb” vào tính toán hiệu quả.</p>
+<p>DeepSeek tách một nhánh nhỏ cho vị trí:</p>
+<p class="math-block">$$\mathbf{k}_t^R = \operatorname{RoPE}(W^{KR}\mathbf{h}_t)$$</p>
+<p>với $\mathbf{k}_t^R \in \mathbb{R}^{64}$. Key cuối cùng cho head $i$ là:</p>
+<p class="math-block">$$\mathbf{k}_{t,i} = [\mathbf{k}_{t,i}^C;\mathbf{k}_t^R]$$</p>
+<p>Tức là:</p>
+<ul>
+<li>phần nội dung được nén mạnh qua $\mathbf{c}_t^{KV}$;</li>
+<li>phần vị trí được giữ riêng trong $\mathbf{k}_t^R$.</li>
+</ul>
+<h3 id="tiet-kiem-bao-nhieu">Tiết kiệm bao nhiêu?</h3>
+<table class="data-table">
+<thead>
+<tr>
+<th>Cách</th>
+<th>Mỗi token mỗi lớp cache gì?</th>
+<th>Số phần tử</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MHA chuẩn</td>
+<td>K đầy đủ + V đầy đủ</td>
+<td>$2 \times 128 \times 128 = 32768$</td>
+</tr>
+<tr>
+<td>MLA</td>
+<td>$\mathbf{c}_t^{KV}$ + $\mathbf{k}_t^R$</td>
+<td>$512 + 64 = 576$</td>
+</tr>
+</tbody>
+</table>
+<p>Tỷ lệ giảm:</p>
+<p class="math-block">$$\frac{32768}{576} \approx 56.9\times$$</p>
+<p>Với 128K context, 61 lớp, BF16:</p>
+<ul>
+<li>MLA: $576 \times 61 \times 128000 \times 2 \approx 9\text{ GB}$.</li>
+<li>MHA: khoảng $512\text{ GB}$.</li>
+</ul>
+<h3 id="vi-sao-mla-tot-hon-chi-giam-so-head">Vì sao MLA tốt hơn “chỉ giảm số head”?</h3>
+<p>Giảm số head hoặc chia sẻ KV làm mô hình ít cách nhìn hơn. MLA giữ cấu trúc nhiều head nhưng nén phần được cache. Nó giống như lưu file ở dạng nén tốt, khi cần thì giải nén đúng cách, thay vì vứt bớt nội dung.</p>
+<p>Đổi lại, MLA phải thêm ma trận nén/giải nén và thiết kế nhánh RoPE riêng. Nhưng cái giá đó nhỏ hơn rất nhiều so với việc giữ KV cache khổng lồ.</p>
+<h2 class="section-heading" data-section-index="04" id="3-deepseekmoe-gating-router-chon-expert-nhu-the-nao">3. DeepSeekMoE gating: router chọn expert như thế nào?</h2>
+<p>Khi dùng MoE, câu hỏi không còn là “mỗi token đi qua FFN nào?” mà là “token này nên gửi tới expert nào?”. Đó là việc của <strong>router</strong> hay <strong>gating</strong>.</p>
+<h3 id="output-cua-lop-moe">Output của lớp MoE</h3>
+<p>Công thức:</p>
+<p class="math-block">$$\mathbf{h}_t' = \mathbf{u}_t + \sum_{i=1}^{N_s}\operatorname{FFN}_i^{(s)}(\mathbf{u}_t) + \sum_{i=1}^{N_r} g_{i,t}\operatorname{FFN}_i^{(r)}(\mathbf{u}_t)$$</p>
+<p>Đọc theo nghĩa thường:</p>
+<ul>
+<li>$\mathbf{u}_t$ là input đi qua residual.</li>
+<li>Shared expert luôn chạy, để giữ năng lực chung.</li>
+<li>Routed experts chỉ chạy nếu router chọn.</li>
+<li>$g_{i,t}$ là trọng số đóng góp của expert $i$ cho token $t$.</li>
+</ul>
+<h3 id="router-tinh-iem-ra-sao">Router tính điểm ra sao?</h3>
+<p>Mỗi expert có một vector đại diện $\mathbf{e}_i$. Token có vector $\mathbf{u}_t$. Độ hợp giữa token và expert:</p>
+<p class="math-block">$$s_{i,t} = \operatorname{Sigmoid}(\mathbf{u}_t^\top \mathbf{e}_i)$$</p>
+<p>Nếu $s_{i,t}$ cao, token hợp với expert đó hơn.</p>
+<p>Sau đó chọn top-8:</p>
+<p class="math-block">$$g'_{i,t} =
+\begin{cases}
+s_{i,t} &amp; \text{nếu } s_{i,t}\text{ thuộc top-}K\\
+0 &amp; \text{ngược lại}
+\end{cases}
+$$</p>
+<p>Rồi chuẩn hóa:</p>
+<p class="math-block">$$g_{i,t} = \frac{g'_{i,t}}{\sum_j g'_{j,t}}$$</p>
+<p>Chuẩn hóa để tổng trọng số của các expert được chọn bằng 1, tránh output phình tùy số điểm.</p>
+<h3 id="vi-du-nho">Ví dụ nhỏ</h3>
+<p>Giả sử có 6 expert, chọn top-2, điểm:</p>
+<p class="math-block">$$s = [0.8, 0.1, 0.6, 0.3, 0.7, 0.2]$$</p>
+<p>Top-2 là expert 1 và 5. Trọng số:</p>
+<p class="math-block">$$g_1 = \frac{0.8}{0.8+0.7}=0.533,\qquad g_5=\frac{0.7}{1.5}=0.467$$</p>
+<p>Output dùng shared expert và hai routed expert đó.</p>
+<h3 id="vi-sao-dung-sigmoid-chu-khong-softmax-toan-bo">Vì sao dùng sigmoid chứ không softmax toàn bộ?</h3>
+<p>Softmax khiến các expert cạnh tranh trực tiếp: một expert tăng điểm thì các expert khác bị ép giảm xác suất tương đối. Sigmoid cho điểm từng expert độc lập hơn; một token có thể “hợp” với nhiều expert cùng lúc, rồi top-K quyết định chọn.</p>
+<p>Điều này hợp với MoE vì token thường có nhiều khía cạnh: một đoạn code toán có thể cần expert code và expert toán. Sigmoid cho router biểu diễn sự phù hợp đa chiều trước khi cắt top-K.</p>
+<h3 id="vi-sao-van-can-top-k">Vì sao vẫn cần top-K?</h3>
+<p>Nếu không top-K, token đi qua quá nhiều expert, MoE mất lợi ích sparse. Nếu top-K quá nhỏ, router có thể thiếu chuyên gia cần thiết. Top-8 là cách giữ compute thấp nhưng vẫn cho token phối hợp nhiều expert.</p>
+<h2 class="section-heading" data-section-index="05" id="4-auxiliary-loss-free-vi-sao-phai-can-bang-tai-expert">4. Auxiliary-loss-free: vì sao phải cân bằng tải expert?</h2>
+<p>MoE chỉ hiệu quả nếu các expert được dùng tương đối cân bằng. Nếu 1 expert nhận 400 token còn expert khác nhận 5 token, GPU chứa expert đầu sẽ quá tải, GPU kia chờ. Tổng tốc độ bị quyết định bởi GPU chậm nhất.</p>
+<h3 id="cach-cu-them-auxiliary-loss">Cách cũ: thêm auxiliary loss</h3>
+<p>Cách phổ biến là thêm một loss phụ để phạt routing lệch:</p>
+<p class="math-block">$$\mathcal{L}_{aux} = \alpha \sum_i f_i P_i$$</p>
+<p>Ý tưởng: ép router chọn đều hơn. Vấn đề: loss phụ đi vào gradient của router. Nó không chỉ nói “đừng quá lệch tải”, mà còn kéo cách router học từ dữ liệu ngôn ngữ.</p>
+<p>Nếu $\alpha$ lớn, tải cân bằng nhưng chất lượng có thể giảm. Nếu $\alpha$ nhỏ, chất lượng ít bị ảnh hưởng nhưng không đủ chống collapse. Đây là đánh đổi khó.</p>
+<h3 id="deepseek-lam-gi-khac">DeepSeek làm gì khác?</h3>
+<p>DeepSeek thêm bias $b_i$ vào <strong>bước chọn expert</strong>, nhưng không đưa bias vào trọng số output:</p>
+<p class="math-block">$$g'_{i,t} =
+\begin{cases}
+s_{i,t} &amp; \text{nếu } s_{i,t}+b_i\text{ thuộc top-}K\\
+0 &amp; \text{ngược lại}
+\end{cases}
+$$</p>
+<p>Bias chỉ giúp expert thiếu tải dễ được chọn hơn, expert quá tải khó được chọn hơn. Nhưng khi expert đã được chọn, output vẫn nhân với $s_{i,t}$ gốc, không nhân với $s_{i,t}+b_i$.</p>
+<h3 id="vi-sao-chi-tiet-nay-quan-trong">Vì sao chi tiết này quan trọng?</h3>
+<p>Nếu bias đi vào output, nó sẽ bóp méo tín hiệu chuyên môn: expert được chọn không phải vì thật sự phù hợp mà vì được “thưởng điểm”. DeepSeek chỉ dùng bias để điều phối giao thông, không dùng nó để thay đổi chuyên môn của expert.</p>
+<p>Luật cập nhật:</p>
+<p class="math-block">$$b_i \leftarrow b_i - \gamma \quad \text{nếu expert }i\text{ quá tải}$$</p>
+<p class="math-block">$$b_i \leftarrow b_i + \gamma \quad \text{nếu expert }i\text{ thiếu tải}$$</p>
+<h3 id="vi-du">Ví dụ</h3>
+<p>Giả sử 3 expert, tải lý tưởng là 33% mỗi expert. Step 1 đo được:</p>
+<ul>
+<li>A: 50%, quá tải.</li>
+<li>B: 30%, hơi thiếu.</li>
+<li>C: 20%, thiếu nhiều.</li>
+</ul>
+<p>Với $\gamma=0.001$ và bias ban đầu $[0,0,0]$:</p>
+<ul>
+<li>$b_A=-0.001$</li>
+<li>$b_B=+0.001$</li>
+<li>$b_C=+0.001$</li>
+</ul>
+<p>Một token có điểm gốc $s=[0.50,0.49,0.48]$. Điểm dùng để chọn:</p>
+<p class="math-block">$$s+b=[0.499,0.491,0.481]$$</p>
+<p>A vẫn có thể thắng nếu thật sự phù hợp. Nhưng khoảng cách thu hẹp, nên các token ranh giới sẽ dần chuyển sang B/C. Đây là điều ta muốn: cân bằng tải bằng các trường hợp ranh giới, không phá lựa chọn rõ ràng.</p>
+<h3 id="tai-sao-tot-hon-auxiliary-loss">Tại sao tốt hơn auxiliary loss?</h3>
+<p>Vì tín hiệu cân bằng tải không trộn trực tiếp vào gradient học ngôn ngữ. Router vẫn học expert nào hợp token nào; bias chỉ là cơ chế điều tiết bên ngoài. Bản gốc ghi nhận ablation aux-loss-free tốt hơn auxiliary loss trên nhiều benchmark, ví dụ GSM8K từ 70.7 lên 74.5 trong so sánh được nêu.</p>
+<h3 id="vi-sao-cuoi-training-co-the-at-math_95">Vì sao cuối training có thể đặt $\gamma=0$?</h3>
+<p>Khi tải đã ổn định, tiếp tục cập nhật bias có thể gây dao động nhỏ không cần thiết. Đặt $\gamma=0$ trong 500B token cuối giúp khóa trạng thái cân bằng đã học.</p>
+<h2 class="section-heading" data-section-index="06" id="5-sequence-wise-balance-loss-neu-a-co-bias-vi-sao-van-can-loss-phu">5. Sequence-wise balance loss: nếu đã có bias, vì sao vẫn cần loss phụ?</h2>
+<p>Auxiliary-loss-free cân bằng tải ở mức hệ thống/batch. Nhưng vẫn có thể xảy ra trường hợp một <strong>chuỗi riêng lẻ</strong> dùng expert quá lệch. Điều này không nhất thiết làm hỏng toàn hệ thống, nhưng có thể làm một sequence học kém hoặc routing quá tập trung.</p>
+<p>DeepSeek giữ một loss rất nhẹ:</p>
+<p class="math-block">$$\mathcal{L}_{Bal} = \alpha \sum_{i=1}^{N_r} f_i P_i$$</p>
+<p>với $\alpha=0.0001$.</p>
+<p>Tần suất expert được chọn:</p>
+<p class="math-block">$$f_i = \frac{N_r}{K_r T}\sum_{t=1}^{T}\mathbb{1}(\text{expert }i\in\text{Top-K của token }t)$$</p>
+<p>Điểm hợp trung bình:</p>
+<p class="math-block">$$P_i = \frac{1}{T}\sum_{t=1}^{T}s'_{i,t},\qquad s'_{i,t}=\frac{s_{i,t}}{\sum_j s_{j,t}}$$</p>
+<h3 id="cong-thuc-nay-phat-ieu-gi">Công thức này phạt điều gì?</h3>
+<p>Nó phạt expert vừa được chọn nhiều vừa có điểm cao trong cùng sequence. Nếu một expert thống trị quá mạnh, $f_i$ và $P_i$ cùng cao, tích $f_iP_i$ cao.</p>
+<h3 id="vi-sao-math_101-rat-nho">Vì sao $\alpha$ rất nhỏ?</h3>
+<p>Vì đây chỉ là dây an toàn. Nếu loss này mạnh, nó quay lại vấn đề cũ: ép router vì cân bằng hơn là vì chất lượng. DeepSeek chủ yếu dựa vào bias ngoài gradient, còn loss này chỉ ngăn các trường hợp lệch cục bộ.</p>
+<p>Nói cách khác: bias là tay lái chính cho cân bằng tải; sequence-wise loss là gờ giảm tốc.</p>
+<h2 class="section-heading" data-section-index="07" id="6-mtp-vi-sao-du-oan-them-token-tuong-lai-giup-train">6. MTP: vì sao dự đoán thêm token tương lai giúp train?</h2>
+<p>Mô hình ngôn ngữ thường học bằng next-token prediction: tại vị trí $i$, dự đoán token $i+1$. Đây là mục tiêu đơn giản và rất mạnh. Nhưng nó có hạn chế: mỗi vị trí chỉ nhận tín hiệu trực tiếp từ một token kế tiếp.</p>
+<h3 id="y-tuong-cua-mtp">Ý tưởng của MTP</h3>
+<p>MTP, Multi-Token Prediction, yêu cầu mô hình dự đoán thêm token xa hơn. DeepSeek-V3 dùng $D=1$, nghĩa là ngoài dự đoán token kế tiếp của mô hình chính, có thêm module dự đoán thêm một token tương lai nữa.</p>
+<p>Vì sao có ích?</p>
+<ul>
+<li>Tín hiệu học dày hơn: một vị trí không chỉ học “từ kế tiếp là gì” mà còn học một phần hướng đi tiếp theo.</li>
+<li>Biểu diễn có xu hướng “lên kế hoạch” tốt hơn, vì phải chứa thông tin hữu ích cho nhiều bước.</li>
+<li>Khi deploy, module phụ có thể bỏ đi, nên chi phí inference chính không tăng.</li>
+</ul>
+<h3 id="module-mtp-hoat-ong-the-nao">Module MTP hoạt động thế nào?</h3>
+<p>Với module thứ $k$:</p>
+<p class="math-block">$$\mathbf{h}_i'^k = M_k[\operatorname{RMSNorm}(\mathbf{h}_i^{k-1});\operatorname{RMSNorm}(\operatorname{Emb}(t_{i+k}))]$$</p>
+<p>Giải thích:</p>
+<ul>
+<li>$\mathbf{h}_i^{k-1}$ là biểu diễn đã có từ model chính hoặc module trước.</li>
+<li>$\operatorname{Emb}(t_{i+k})$ là embedding của token tương lai gần hơn, dùng để duy trì chuỗi nhân quả.</li>
+<li>Hai vector được ghép lại, rồi $M_k$ chiếu từ $2d$ về $d$.</li>
+</ul>
+<p>Sau đó:</p>
+<p class="math-block">$$\mathbf{h}_i^k = \operatorname{TRM}_k(\mathbf{h}_i'^k)$$</p>
+<p>và:</p>
+<p class="math-block">$$P_{i+k+1}^k = \operatorname{OutHead}(\mathbf{h}_i^k)$$</p>
+<p>Embedding và output head được chia sẻ với model chính, giúp module phụ không học một không gian từ vựng riêng lệch khỏi model chính.</p>
+<h3 id="loss-mtp">Loss MTP</h3>
+<p class="math-block">$$\mathcal{L}_{MTP}^{k} = -\frac{1}{T}\sum_i \log P_i^k[t_i]$$</p>
+<p class="math-block">$$\mathcal{L}_{MTP} = \frac{\lambda}{D}\sum_{k=1}^{D}\mathcal{L}_{MTP}^{k}$$</p>
+<p>DeepSeek đặt $\lambda=0.3$ cho 10T token đầu, rồi $\lambda=0.1$ cho 4.8T token sau.</p>
+<h3 id="vi-sao-khong-dung-nhieu-head-song-song-oc-lap">Vì sao không dùng nhiều head song song độc lập?</h3>
+<p>Nếu mỗi head dự đoán một token tương lai độc lập từ cùng biểu diễn, chúng có thể thiếu quan hệ nhân quả giữa các bước. DeepSeek dùng các module tuần tự: module sau dựa vào module trước. Điều này giữ “dòng thời gian” hợp lý hơn.</p>
+<h3 id="khi-inference-thi-sao">Khi inference thì sao?</h3>
+<p>Có hai lựa chọn:</p>
+<ol>
+<li><strong>Bỏ module MTP</strong>. Model chính chạy như bình thường, chi phí inference không tăng. Đây là lý do MTP hấp dẫn: nó giúp train nhưng có thể không làm deploy nặng hơn.</li>
+<li><strong>Dùng cho speculative decoding</strong>. MTP đoán trước token, model chính xác minh. Nếu tỷ lệ chấp nhận cao, tốc độ sinh token tăng. Bản gốc nêu tỷ lệ chấp nhận 85–90% và TPS khoảng $\times 1.8$.</li>
+</ol>
+<h3 id="oi-lai-la-gi_1">Đổi lại là gì?</h3>
+<p>Train phức tạp hơn, thêm module và loss phụ. Nếu $\lambda$ quá lớn, mục tiêu phụ có thể kéo model khỏi next-token objective chính. Vì vậy DeepSeek giảm $\lambda$ về 0.1 ở giai đoạn sau.</p>
+<h2 class="section-heading" data-section-index="08" id="7-fp8-vi-sao-dung-so-8-bit-ma-khong-lam-training-sap">7. FP8: vì sao dùng số 8-bit mà không làm training sập?</h2>
+<p>Huấn luyện LLM chủ yếu là nhân ma trận khổng lồ. Nếu dùng BF16, mỗi số tốn 16 bit. FP8 chỉ 8 bit, nghĩa là có thể giảm băng thông/bộ nhớ và tăng tốc GEMM. Nhưng FP8 rất dễ làm training bất ổn.</p>
+<h3 id="fp8-e4m3-la-gi">FP8 E4M3 là gì?</h3>
+<p>E4M3 có:</p>
+<ul>
+<li>1 bit dấu.</li>
+<li>4 bit exponent.</li>
+<li>3 bit mantissa.</li>
+</ul>
+<p>So với BF16, mantissa ít hơn nhiều, nên độ phân giải thô hơn. Nói đơn giản: FP8 nhớ số “ít chữ số” hơn. Nếu scale không đúng, số nhỏ bị mất, số lớn bị cắt, gradient nhiễu và model có thể phân kỳ.</p>
+<h3 id="vi-sao-per-tensor-quantization-nguy-hiem">Vì sao per-tensor quantization nguy hiểm?</h3>
+<p>Cách ngây thơ: lấy max tuyệt đối của cả tensor để scale. Giả sử tensor đa số nằm trong $[-2,2]$, nhưng có một outlier bằng 1000.</p>
+<p>Scale:</p>
+<p class="math-block">$$448/1000 = 0.448$$</p>
+<p>Một giá trị bình thường $0.5$ thành $0.224$ sau scale. Giá trị nhỏ $0.01$ thành $0.00448$, rất dễ bị làm tròn mất. Chỉ một outlier đã kéo thang đo của toàn tensor, làm hỏng phần lớn giá trị bình thường.</p>
+<h3 id="deepseek-dung-fine-grained-quantization">DeepSeek dùng fine-grained quantization</h3>
+<p>Thay vì một scale cho cả tensor, chia thành tile nhỏ:</p>
+<ul>
+<li>Activation: tile $1\times128$.</li>
+<li>Weight: tile $128\times128$.</li>
+</ul>
+<p>Nếu outlier nằm ở một tile, chỉ tile đó bị ảnh hưởng. Các tile khác giữ scale phù hợp. Đây là lý do “fine-grained” tốt hơn: nó cô lập outlier.</p>
+<h3 id="vi-sao-khong-dung-int8">Vì sao không dùng INT8?</h3>
+<p>INT8 cần scale và thường phù hợp hơn cho inference hoặc một số phần đã ổn định. Training cần gradient, activation, weight thay đổi liên tục và có dải động phức tạp. FP8 giữ exponent nên biểu diễn dải động tự nhiên hơn INT8. DeepSeek vẫn phải rất cẩn thận, nhưng FP8 là lựa chọn hợp lý hơn cho mixed precision training.</p>
+<h3 id="van-e-tich-luy-tren-h800">Vấn đề tích lũy trên H800</h3>
+<p>Tensor Core khi cộng dồn FP8 GEMM trên Hopper chỉ giữ khoảng 14 bit trong một số bước tích lũy. Với chiều trong $K$ lớn, ví dụ $K=4096$, lỗi tích lũy có thể lên tới khoảng 2%, đủ làm hỏng training.</p>
+<p>DeepSeek dùng “promotion to CUDA cores”: sau mỗi $N_C=128$ phần tử, đưa tổng trung gian sang thanh ghi FP32 trên CUDA Core để cộng chính xác hơn. $N_C=128$ tương ứng 4 WGMMA, đủ cải thiện mà không làm overhead quá lớn.</p>
+<h3 id="online-quantization">Online quantization</h3>
+<p>Cách delayed scaling dùng lịch sử max-abs từ các vòng trước để đoán scale. Nhưng activation hiện tại có thể khác lịch sử. DeepSeek dùng online quantization: tính max-abs tại chỗ cho tile/block hiện tại, scale theo dữ liệu thật đang xử lý.</p>
+<h3 id="vi-sao-activation-gradient-ac-biet-nguy-hiem">Vì sao activation gradient đặc biệt nguy hiểm?</h3>
+<p>Bản gốc nêu thử nghiệm lượng tử hóa block-wise $128\times128$ cho activation gradient (Dgrad) làm mô hình khoảng 16B phân kỳ sau khoảng 300B token.</p>
+<p>Lý do: activation gradient có outlier tương quan theo token. Nếu gom nhiều token vào một block lớn, một token outlier kéo scale của token khác. Gradient sai lan ngược về các lớp nông, nên lỗi tích lũy rất nhanh. Vì vậy activation dùng tile $1\times128$ là điều kiện sống còn, không phải tối ưu nhỏ.</p>
+<h3 id="ket-qua-cuoi">Kết quả cuối</h3>
+<p>Sai số loss FP8 so với BF16 dưới 0.25%, trong vùng nhiễu ngẫu nhiên, được kiểm chứng trên model khoảng 16B và 230B. Đổi lại, GEMM nhanh hơn khoảng 2 lần và bộ nhớ activation giảm mạnh.</p>
+<p>Ý chính: FP8 không tốt vì “8 bit là đủ”. FP8 tốt vì DeepSeek xây cả bộ cơ chế để làm 8 bit không phá training.</p>
+<h2 class="section-heading" data-section-index="09" id="8-dualpipe-vi-sao-pipeline-can-hai-chieu">8. DualPipe: vì sao pipeline cần hai chiều?</h2>
+<p>Khi model quá lớn, ta chia các lớp lên nhiều GPU theo pipeline parallelism. Stage 1 xử lý xong mới đưa cho stage 2, stage 2 đưa cho stage 3, v.v.</p>
+<p>Vấn đề gọi là <strong>bubble</strong>: có lúc GPU không có việc vì đang chờ stage khác.</p>
+<h3 id="cach-cu-1f1b">Cách cũ: 1F1B</h3>
+<p>1F1B xen kẽ forward và backward để giảm chờ, nhưng vẫn có bubble:</p>
+<p class="math-block">$$\text{bubble}_{1F1B} = (PP-1)(F+B)$$</p>
+<p>Với $PP$ là số pipeline stage, $F$ là thời gian forward, $B$ là backward.</p>
+<h3 id="zb1p-giam-bubble-bang-cach-tach-weight-backward">ZB1P giảm bubble bằng cách tách weight backward</h3>
+<p class="math-block">$$\text{bubble}_{ZB1P} = (PP-1)(F+B-2W)$$</p>
+<p>Nó tốt hơn, nhưng DeepSeek còn có vấn đề đặc biệt: MoE tạo all-to-all communication nặng. Nếu không giấu giao tiếp, GPU vẫn chờ mạng.</p>
+<h3 id="dualpipe-lam-gi">DualPipe làm gì?</h3>
+<p>DualPipe chạy pipeline hai chiều và chia chunk thành phần tính toán/giao tiếp để overlap:</p>
+<ul>
+<li>attention;</li>
+<li>all-to-all dispatch;</li>
+<li>MLP expert;</li>
+<li>all-to-all combine.</li>
+</ul>
+<p>Công thức bubble:</p>
+<p class="math-block">$$\text{bubble}_{DualPipe} = \left(\frac{PP}{2}-1\right)(F\&amp;B+B-3W)$$</p>
+<p>Ví dụ minh họa với $PP=16$, $F=1$, $B=2$, $W=1$, $F\&amp;B\approx2$:</p>
+<ul>
+<li>1F1B: $(16-1)(1+2)=45$.</li>
+<li>ZB1P: $(16-1)(1+2-2)=15$.</li>
+<li>DualPipe: $(16/2-1)(2+2-3)=7$.</li>
+</ul>
+<p>Con số này không phải đo thực, nhưng cho thấy thứ tự độ lớn: DualPipe giảm bubble rõ rệt.</p>
+<h3 id="vi-sao-hai-chieu-giup">Vì sao hai chiều giúp?</h3>
+<p>Pipeline một chiều giống dây chuyền chỉ đẩy việc từ trái sang phải. Đầu và cuối dây chuyền dễ có lúc rỗng. Hai chiều cho micro-batch đi từ cả hai đầu, nên các stage có cơ hội nhận việc đều hơn.</p>
+<p>Quan trọng hơn, DeepSeek dùng lịch để giao tiếp của phần này bị che sau tính toán của phần khác. Với MoE, all-to-all nặng gần bằng tính toán, nên overlap là bắt buộc.</p>
+<h3 id="oi-lai-la-gi_2">Đổi lại là gì?</h3>
+<p>DualPipe giữ hai bản sao tham số do hai chiều pipeline. Điều này tăng bộ nhớ, nhưng DeepSeek dùng expert parallelism lớn nên tham số đã được chia nhỏ; overhead không còn là điểm nghẽn chính.</p>
+<p>Vì vậy DualPipe là lựa chọn hợp lý trong hệ thống này, nhưng không nhất thiết là lựa chọn đơn giản nhất cho mọi model nhỏ.</p>
+<h2 class="section-heading" data-section-index="10" id="9-all-to-all-vi-sao-moe-bi-nghen-mang">9. All-to-all: vì sao MoE bị nghẽn mạng?</h2>
+<p>Trong MoE, expert nằm trên nhiều GPU. Token ở GPU này có thể được router gửi tới expert trên GPU khác. Khi mọi GPU đều gửi token cho mọi GPU, ta có all-to-all communication.</p>
+<p>Nếu không tối ưu, MoE thắng về compute nhưng thua vì mạng.</p>
+<h3 id="hai-loai-ket-noi">Hai loại kết nối</h3>
+<table class="data-table">
+<thead>
+<tr>
+<th>Mạng</th>
+<th>Phạm vi</th>
+<th>Băng thông</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NVLink</td>
+<td>trong một node 8 GPU</td>
+<td>160 GB/s</td>
+</tr>
+<tr>
+<td>InfiniBand</td>
+<td>giữa các node</td>
+<td>50 GB/s</td>
+</tr>
+</tbody>
+</table>
+<p>NVLink nhanh hơn:</p>
+<p class="math-block">$$160/50 = 3.2\times$$</p>
+<h3 id="vi-sao-ib-truoc-nvlink-sau">Vì sao “IB trước, NVLink sau”?</h3>
+<p>DeepSeek gửi token qua InfiniBand tới GPU cùng in-node index ở node đích, rồi dùng NVLink trong node để chuyển tới GPU chứa expert. Vì NVLink nhanh hơn, phần chuyển nội bộ có thể overlap với IB.</p>
+<p>Điều này hợp lý vì ta muốn dùng đường chậm nhất (IB) một cách có kiểm soát và dùng đường nhanh hơn (NVLink) để phân phối nội bộ.</p>
+<h3 id="gioi-han-node-va-so-expert">Giới hạn node và số expert</h3>
+<p>Bản gốc nêu mỗi token gửi tới không quá 4 node, trung bình 3.2 expert/node:</p>
+<p class="math-block">$$4 \times 3.2 = 12.8 \approx 13\text{ expert}$$</p>
+<p>V3 chỉ chọn 8 routed expert, nên cấu trúc này còn dư địa về mặt giao tiếp.</p>
+<h3 id="vi-sao-can-kernel-tuy-chinh">Vì sao cần kernel tùy chỉnh?</h3>
+<p>All-to-all mặc định có thể dùng nhiều tài nguyên và đụng vào compute. DeepSeek dùng warp specialization, dành khoảng 20/132 SM của H800 cho giao tiếp, chia thành 10 kênh và auto-tune chunk size.</p>
+<p>Mục tiêu không phải chỉ là “gửi nhanh”, mà là “gửi nhanh trong khi phần tính toán chính vẫn chạy”. Nếu giao tiếp chiếm quá nhiều SM hoặc L2 cache, nó phá lợi ích của overlap.</p>
+<h3 id="bai-hoc-phan-cung">Bài học phần cứng</h3>
+<p>DeepSeek cũng đề xuất phần cứng tương lai nên hỗ trợ giao tiếp/quantization tốt hơn, vì hiện tại phải dùng SM quý giá để làm việc giao tiếp. Đây là ví dụ rõ của co-design: thuật toán tạo nhu cầu mới cho phần cứng.</p>
+<h2 class="section-heading" data-section-index="11" id="10-grpo-vi-sao-bo-critic-trong-rl">10. GRPO: vì sao bỏ critic trong RL?</h2>
+<p>Sau pre-training và supervised fine-tuning, model thường được cải thiện bằng RL từ reward. Cách phổ biến là PPO. PPO cần một critic/value model để ước lượng baseline: output này tốt hơn kỳ vọng bao nhiêu?</p>
+<h3 id="van-e-cua-critic">Vấn đề của critic</h3>
+<p>Với model nhỏ, thêm critic còn chịu được. Với policy 671B, critic cùng cỡ là gánh nặng khổng lồ: thêm bộ nhớ, thêm compute, thêm độ phức tạp train.</p>
+<p>Vì vậy DeepSeek dùng GRPO, Group Relative Policy Optimization.</p>
+<h3 id="y-tuong-grpo">Ý tưởng GRPO</h3>
+<p>Với mỗi câu hỏi $q$, sample một nhóm output:</p>
+<p class="math-block">$$\{o_1,o_2,\ldots,o_G\}$$</p>
+<p>Chấm reward:</p>
+<p class="math-block">$$\{r_1,r_2,\ldots,r_G\}$$</p>
+<p>Thay vì hỏi critic “kỳ vọng là bao nhiêu?”, dùng chính trung bình nhóm làm baseline. Advantage:</p>
+<p class="math-block">$$A_i = \frac{r_i-\operatorname{mean}(r)}{\operatorname{std}(r)}$$</p>
+<p>Output tốt hơn trung bình nhóm có advantage dương; kém hơn có advantage âm.</p>
+<h3 id="ham-muc-tieu">Hàm mục tiêu</h3>
+<p class="math-block">$$\mathcal{J}_{GRPO}(\theta)=\mathbb{E}\left[\frac{1}{G}\sum_{i=1}^{G}\left(\min(\rho_iA_i,\operatorname{clip}(\rho_i,1-\epsilon,1+\epsilon)A_i)-\beta D_{KL}(\pi_\theta\|\pi_{ref})\right)\right]$$</p>
+<p>Trong đó:</p>
+<ul>
+<li>$\rho_i=\frac{\pi_\theta(o_i|q)}{\pi_{\theta_{old}}(o_i|q)}$ là tỷ lệ xác suất policy mới/cũ.</li>
+<li>Clip chặn policy thay đổi quá mạnh trong một bước.</li>
+<li>KL giữ policy không trôi quá xa model tham chiếu.</li>
+</ul>
+<h3 id="vi-du_1">Ví dụ</h3>
+<p>Reward nhóm 4 output:</p>
+<p class="math-block">$$r=\{0.9,0.2,0.5,0.8\}$$</p>
+<p>Mean:</p>
+<p class="math-block">$$0.6$$</p>
+<p>Std:</p>
+<p class="math-block">$$0.274$$</p>
+<p>Advantage:</p>
+<ul>
+<li>$A_1=(0.9-0.6)/0.274=+1.10$</li>
+<li>$A_2=(0.2-0.6)/0.274=-1.46$</li>
+<li>$A_3=(0.5-0.6)/0.274=-0.37$</li>
+<li>$A_4=(0.8-0.6)/0.274=+0.73$</li>
+</ul>
+<p>Như vậy model tăng xác suất output 1 và 4, giảm output 2 và 3.</p>
+<h3 id="vi-sao-khong-can-critic">Vì sao không cần critic?</h3>
+<p>Vì baseline được lấy từ nhóm output cùng câu hỏi. Ta không cần một model riêng dự đoán giá trị tuyệt đối; chỉ cần biết trong nhóm này output nào tốt hơn tương đối.</p>
+<p>Đổi lại, GRPO cần sample nhiều output cho mỗi câu hỏi. Nhưng chi phí đó thường hợp lý hơn việc nuôi thêm một critic cực lớn.</p>
+<h3 id="reward-model-cua-v3">Reward model của V3</h3>
+<p>Bản gốc nêu hai loại reward:</p>
+<ul>
+<li>Rule-based cho toán/code có đáp án rõ hoặc test chạy được. Cách này ít bị reward hacking hơn.</li>
+<li>Model-based cho đáp án tự do, dùng reward model từ checkpoint SFT và có chain-of-thought dẫn tới reward để giảm gian lận.</li>
+</ul>
+<h2 class="section-heading" data-section-index="12" id="11-chi-phi-huan-luyen-cac-con-so-co-khop-khong">11. Chi phí huấn luyện: các con số có khớp không?</h2>
+<p>DeepSeek-V3 nêu chi phí training chính thức thấp so với quy mô model. Ta kiểm tra các phép tính:</p>
+<p>Với 180K GPU-hours cho 1T token, cụm 2048 GPU:</p>
+<p class="math-block">$$180000/2048=87.9\text{ giờ}\approx3.66\text{ ngày}$$</p>
+<p>Với 14.8T token:</p>
+<p class="math-block">$$87.9\times14.8=1300\text{ giờ}\approx54\text{ ngày}$$</p>
+<p>Tổng pre-training:</p>
+<p class="math-block">$$180K\times14.8=2664K\text{ GPU-hours}$$</p>
+<p>Nếu tính $2/GPU\text{-hour}$:</p>
+<p class="math-block">$$2664K\times2=5.328\text{ triệu USD}$$</p>
+<p>Cộng context extension 119K GPU-hours và post-training 5K GPU-hours:</p>
+<p class="math-block">$$2788K\times2=5.576\text{ triệu USD}$$</p>
+<h3 id="vi-sao-con-so-nay-khong-nen-bi-hieu-sai">Vì sao con số này không nên bị hiểu sai?</h3>
+<p>Đây là chi phí của lần training chính thức được báo cáo, không bao gồm toàn bộ R&amp;D, ablation, thử sai kiến trúc, chuẩn bị dữ liệu, nhân sự, hạ tầng, hoặc chi phí cơ hội. Vì vậy câu đúng là:</p>
+<blockquote>
+<p>DeepSeek-V3 báo cáo chi phí compute cho lần training chính thức khoảng 5.576M USD theo giả định $2/GPU-hour$.</p>
+</blockquote>
+<p>Không nên nói đơn giản “làm model frontier chỉ tốn 5.5M” nếu không kèm điều kiện.</p>
+<h3 id="vi-sao-van-ang-chu-y">Vì sao vẫn đáng chú ý?</h3>
+<p>Vì ngay cả khi không tính toàn bộ R&amp;D, việc train một MoE 671B ổn định bằng FP8, DualPipe và hệ thống all-to-all tùy chỉnh vẫn chứng minh rằng kỹ thuật hệ thống có thể giảm chi phí rất lớn.</p>
+<h2 class="section-heading" data-section-index="13" id="12-long-context-yarn-vi-sao-mo-tu-4k-len-128k-khong-chi-la-tang-so">12. Long context YaRN: vì sao mở từ 4K lên 128K không chỉ là tăng số?</h2>
+<p>Transformer dùng RoPE để mã hóa vị trí. Nếu model chủ yếu train ở context 4K, nó không tự nhiên hiểu tốt vị trí 100K. Chỉ tăng giới hạn input không đảm bảo model dùng được context dài.</p>
+<h3 id="deepseek-mo-context-theo-hai-giai-oan">DeepSeek mở context theo hai giai đoạn</h3>
+<p>Sau pre-training 4K:</p>
+<ol>
+<li>4K → 32K, sequence length 32K, batch 1920, 1000 step.</li>
+<li>32K → 128K, sequence length 128K, batch 480, 1000 step.</li>
+</ol>
+<p>Dùng YaRN để nội suy/ngoại suy tần số RoPE, giúp model thích nghi với vị trí xa hơn.</p>
+<p>Cấu hình:</p>
+<p class="math-block">$$s=40,\qquad \alpha=1,\qquad \beta=32,\qquad \sqrt{t}=0.1\ln s+1$$</p>
+<h3 id="vi-sao-chi-ap-len-math_148">Vì sao chỉ áp lên $\mathbf{k}^R$?</h3>
+<p>Trong MLA, phần RoPE đã được tách vào decoupled shared key $\mathbf{k}^R$. Vì vậy muốn sửa hành vi vị trí, ta sửa đúng nhánh mang vị trí. Điều này sạch hơn việc đụng vào toàn bộ key/value nội dung.</p>
+<h3 id="kiem-tra-bang-needle-in-a-haystack">Kiểm tra bằng Needle In A Haystack</h3>
+<p>Needle test giấu một thông tin trong văn bản rất dài và hỏi model tìm lại. Nếu model chỉ “nhận” được input dài nhưng không thật sự truy hồi được, nó sẽ fail. Bản gốc nêu V3 đạt kết quả tốt trên toàn dải tới 128K, nghĩa là context dài không chỉ là thông số quảng cáo.</p>
+<h2 class="section-heading" data-section-index="14" id="13-ket-luan-vi-sao-cac-ky-thuat-nay-phai-i-cung-nhau">13. Kết luận: vì sao các kỹ thuật này phải đi cùng nhau?</h2>
+<p>Nếu chỉ nhìn từng kỹ thuật riêng lẻ, có thể nghĩ DeepSeek-V3 là tập hợp nhiều mẹo. Cách nhìn đúng hơn: mỗi kỹ thuật mở khóa kỹ thuật khác.</p>
+<table class="data-table">
+<thead>
+<tr>
+<th>Kỹ thuật</th>
+<th>Đánh đổi cũ</th>
+<th>Cách DeepSeek phá đánh đổi</th>
+<th>Vì sao cần trong hệ thống chung</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MoE</td>
+<td>Nhiều tham số thì compute lớn</td>
+<td>Sparse activation</td>
+<td>Cho model có dung lượng 671B nhưng compute/token khoảng 37B</td>
+</tr>
+<tr>
+<td>MLA</td>
+<td>Context dài làm cache nổ</td>
+<td>Cache vector nén + RoPE tách riêng</td>
+<td>Làm 128K context thực tế hơn</td>
+</tr>
+<tr>
+<td>Aux-loss-free</td>
+<td>Cân bằng tải làm hại quality</td>
+<td>Bias ngoài gradient</td>
+<td>Giữ MoE chạy đều mà ít phá router</td>
+</tr>
+<tr>
+<td>Sequence-wise loss</td>
+<td>Một sequence có thể lệch expert</td>
+<td>Loss rất nhẹ</td>
+<td>Dây an toàn cục bộ</td>
+</tr>
+<tr>
+<td>MTP</td>
+<td>Nhiều tín hiệu train làm inference nặng</td>
+<td>Module phụ có thể bỏ</td>
+<td>Tăng chất lượng train mà deploy không phải trả đủ</td>
+</tr>
+<tr>
+<td>FP8</td>
+<td>Train nhanh dễ mất ổn định</td>
+<td>Fine-grained quant + FP32 accumulation</td>
+<td>Giảm chi phí training quy mô lớn</td>
+</tr>
+<tr>
+<td>DualPipe</td>
+<td>Pipeline nhiều GPU có bubble</td>
+<td>Pipeline hai chiều + overlap</td>
+<td>Giữ GPU bận khi model phân tán</td>
+</tr>
+<tr>
+<td>All-to-all kernel</td>
+<td>MoE bị nghẽn mạng</td>
+<td>Kernel giao tiếp tùy chỉnh</td>
+<td>Biến MoE lớn thành thứ chạy được</td>
+</tr>
+<tr>
+<td>GRPO</td>
+<td>PPO cần critic lớn</td>
+<td>Baseline từ nhóm</td>
+<td>RL hậu huấn luyện rẻ hơn</td>
+</tr>
+<tr>
+<td>YaRN</td>
+<td>Context dài không tự nhiên tổng quát</td>
+<td>Mở context theo giai đoạn</td>
+<td>Cho model dùng được 128K context</td>
+</tr>
+</tbody>
+</table>
+<p>Thông điệp cuối cùng: DeepSeek-V3 không mạnh chỉ vì có 671B tham số. Nó mạnh vì kiến trúc, mục tiêu huấn luyện, số học FP8, pipeline, giao tiếp và hậu huấn luyện được thiết kế cùng nhau. Nếu bỏ một mắt xích, các mắt xích khác dễ mất tác dụng.</p>
+      </article>
+
+      <footer class="page-footer">
+        <span>Biên soạn lại từ <strong>DeepSeek-V3 Technical Report</strong> · <a href="https://arxiv.org/abs/2412.19437" target="_blank" rel="noopener">arXiv:2412.19437</a> · công thức render bằng MathJax.</span>
+        <a class="to-top" href="#top">↑ Lên đầu trang</a>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    const root = document.documentElement;
+    const saved = localStorage.getItem('deepseek-v3-theme');
+    if (saved) {
+      root.dataset.theme = saved;
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      root.dataset.theme = 'dark';
+    }
+
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      root.dataset.theme = next;
+      localStorage.setItem('deepseek-v3-theme', next);
+    });
+
+    document.getElementById('top-button').addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    document.querySelectorAll('.article table').forEach((table) => {
+      if (table.parentElement.classList.contains('table-wrap')) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      table.parentNode.insertBefore(wrap, table);
+      wrap.appendChild(table);
+    });
+
+    const progressBar = document.getElementById('progress-bar');
+    const updateProgress = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const pct = max > 0 ? window.scrollY / max * 100 : 0;
+      progressBar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+    };
+    addEventListener('scroll', updateProgress, { passive: true });
+    addEventListener('resize', updateProgress);
+    updateProgress();
+
+    const headings = [...document.querySelectorAll('.article h2')];
+    const links = [...document.querySelectorAll('.sidebar .outline-links a')];
+    if (headings.length && links.length) {
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (!visible) return;
+        const id = visible.target.id;
+        links.forEach(link => link.classList.toggle('active', link.hash.slice(1) === id));
+      }, { rootMargin: '-12% 0px -72% 0px', threshold: 0 });
+      headings.forEach(heading => observer.observe(heading));
+    }
+</script>
+</body>
+</html>

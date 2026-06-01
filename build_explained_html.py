@@ -67,6 +67,8 @@ Các hằng số sẽ xuất hiện xuyên suốt:
 
 Nếu nhớ ba ý này, bạn sẽ hiểu vì sao DeepSeek-V3 liên tục tách “có nhiều” khỏi “phải tính nhiều”: nhiều tham số nhưng ít tham số kích hoạt; context dài nhưng KV cache nhỏ; train thêm mục tiêu phụ nhưng deploy có thể bỏ module phụ.
 
+DIAGRAMSLOTOVERVIEW
+
 ## 1. Vì sao có con số 671B / 37B?
 
 Nghe “671B tham số nhưng chỉ kích hoạt 37B mỗi token” rất dễ hiểu sai thành “mô hình chỉ dùng một phần nhỏ nên phần còn lại vô nghĩa”. Không phải vậy. Cách đúng để nhìn là: **671B là kho chuyên gia**, còn **37B là nhóm chuyên gia được gọi cho một token cụ thể**.
@@ -93,6 +95,8 @@ Trong DeepSeek-V3:
 - Mỗi token đi qua 8 routed expert + 1 shared expert.
 
 Vì vậy, mô hình có rất nhiều expert để lưu tri thức, nhưng một token chỉ gọi một nhóm nhỏ expert.
+
+DIAGRAMSLOTMOE
 
 ### Tính tham số của một expert
 
@@ -207,6 +211,8 @@ Tức là:
 - phần nội dung được nén mạnh qua $\mathbf{c}_t^{KV}$;
 - phần vị trí được giữ riêng trong $\mathbf{k}_t^R$.
 
+DIAGRAMSLOTMLAFLOW
+
 ### Tiết kiệm bao nhiêu?
 
 | Cách | Mỗi token mỗi lớp cache gì? | Số phần tử |
@@ -222,6 +228,8 @@ Với 128K context, 61 lớp, BF16:
 
 - MLA: $576 \times 61 \times 128000 \times 2 \approx 9\text{ GB}$.
 - MHA: khoảng $512\text{ GB}$.
+
+DIAGRAMSLOTMLABAR
 
 ### Vì sao MLA tốt hơn “chỉ giảm số head”?
 
@@ -280,6 +288,8 @@ Top-2 là expert 1 và 5. Trọng số:
 $$g_1 = \frac{0.8}{0.8+0.7}=0.533,\qquad g_5=\frac{0.7}{1.5}=0.467$$
 
 Output dùng shared expert và hai routed expert đó.
+
+DIAGRAMSLOTGATE
 
 ### Vì sao dùng sigmoid chứ không softmax toàn bộ?
 
@@ -347,6 +357,8 @@ Một token có điểm gốc $s=[0.50,0.49,0.48]$. Điểm dùng để chọn:
 $$s+b=[0.499,0.491,0.481]$$
 
 A vẫn có thể thắng nếu thật sự phù hợp. Nhưng khoảng cách thu hẹp, nên các token ranh giới sẽ dần chuyển sang B/C. Đây là điều ta muốn: cân bằng tải bằng các trường hợp ranh giới, không phá lựa chọn rõ ràng.
+
+DIAGRAMSLOTBIAS
 
 ### Tại sao tốt hơn auxiliary loss?
 
@@ -420,6 +432,8 @@ $$P_{i+k+1}^k = \operatorname{OutHead}(\mathbf{h}_i^k)$$
 
 Embedding và output head được chia sẻ với model chính, giúp module phụ không học một không gian từ vựng riêng lệch khỏi model chính.
 
+DIAGRAMSLOTMTP
+
 ### Loss MTP
 
 $$\mathcal{L}_{MTP}^{k} = -\frac{1}{T}\sum_i \log P_i^k[t_i]$$
@@ -475,6 +489,8 @@ Thay vì một scale cho cả tensor, chia thành tile nhỏ:
 - Weight: tile $128\times128$.
 
 Nếu outlier nằm ở một tile, chỉ tile đó bị ảnh hưởng. Các tile khác giữ scale phù hợp. Đây là lý do “fine-grained” tốt hơn: nó cô lập outlier.
+
+DIAGRAMSLOTFP8
 
 ### Vì sao không dùng INT8?
 
@@ -543,6 +559,8 @@ Ví dụ minh họa với $PP=16$, $F=1$, $B=2$, $W=1$, $F\&B\approx2$:
 
 Con số này không phải đo thực, nhưng cho thấy thứ tự độ lớn: DualPipe giảm bubble rõ rệt.
 
+DIAGRAMSLOTPIPE
+
 ### Vì sao hai chiều giúp?
 
 Pipeline một chiều giống dây chuyền chỉ đẩy việc từ trái sang phải. Đầu và cuối dây chuyền dễ có lúc rỗng. Hai chiều cho micro-batch đi từ cả hai đầu, nên các stage có cơ hội nhận việc đều hơn.
@@ -577,6 +595,8 @@ $$160/50 = 3.2\times$$
 DeepSeek gửi token qua InfiniBand tới GPU cùng in-node index ở node đích, rồi dùng NVLink trong node để chuyển tới GPU chứa expert. Vì NVLink nhanh hơn, phần chuyển nội bộ có thể overlap với IB.
 
 Điều này hợp lý vì ta muốn dùng đường chậm nhất (IB) một cách có kiểm soát và dùng đường nhanh hơn (NVLink) để phân phối nội bộ.
+
+DIAGRAMSLOTA2A
 
 ### Giới hạn node và số expert
 
@@ -655,6 +675,8 @@ Advantage:
 
 Như vậy model tăng xác suất output 1 và 4, giảm output 2 và 3.
 
+DIAGRAMSLOTGRPO
+
 ### Vì sao không cần critic?
 
 Vì baseline được lấy từ nhóm output cùng câu hỏi. Ta không cần một model riêng dự đoán giá trị tuyệt đối; chỉ cần biết trong nhóm này output nào tốt hơn tương đối.
@@ -717,6 +739,8 @@ Sau pre-training 4K:
 
 Dùng YaRN để nội suy/ngoại suy tần số RoPE, giúp model thích nghi với vị trí xa hơn.
 
+DIAGRAMSLOTYARN
+
 Cấu hình:
 
 $$s=40,\qquad \alpha=1,\qquad \beta=32,\qquad \sqrt{t}=0.1\ln s+1$$
@@ -748,6 +772,450 @@ Nếu chỉ nhìn từng kỹ thuật riêng lẻ, có thể nghĩ DeepSeek-V3 l
 
 Thông điệp cuối cùng: DeepSeek-V3 không mạnh chỉ vì có 671B tham số. Nó mạnh vì kiến trúc, mục tiêu huấn luyện, số học FP8, pipeline, giao tiếp và hậu huấn luyện được thiết kế cùng nhau. Nếu bỏ một mắt xích, các mắt xích khác dễ mất tác dụng.
 """
+
+
+# ---------------------------------------------------------------------------
+# Sơ đồ minh hoạ (SVG vẽ tay). Mỗi sơ đồ được chèn vào ARTICLE_MD qua một
+# placeholder dạng chữ HOA (vd: DIAGRAMSLOTMOE) đứng riêng một dòng. Việc thay
+# placeholder bằng SVG xảy ra SAU BeautifulSoup (xem build_page) để parser HTML
+# không hạ thấp các thuộc tính camelCase của SVG như viewBox / markerWidth.
+# Màu sắc lấy từ biến CSS nên sơ đồ tự đổi theo giao diện sáng/tối.
+# ---------------------------------------------------------------------------
+
+ARROW_DEFS = r"""<svg class="dg-defs" aria-hidden="true" focusable="false"><defs>
+<marker id="dgAr" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="7.5" refY="5.5" orient="auto"><path d="M0 1 L9 5.5 L0 10 Z" class="dg-ar-muted"></path></marker>
+<marker id="dgArA" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="7.5" refY="5.5" orient="auto"><path d="M0 1 L9 5.5 L0 10 Z" class="dg-ar-accent"></path></marker>
+<marker id="dgArG" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="7.5" refY="5.5" orient="auto"><path d="M0 1 L9 5.5 L0 10 Z" class="dg-ar-good"></path></marker>
+<marker id="dgArC" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="7.5" refY="5.5" orient="auto"><path d="M0 1 L9 5.5 L0 10 Z" class="dg-ar-cool"></path></marker>
+<marker id="dgArW" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="7.5" refY="5.5" orient="auto"><path d="M0 1 L9 5.5 L0 10 Z" class="dg-ar-warn"></path></marker>
+</defs></svg>"""
+
+
+DIAGRAMS: dict[str, str] = {}
+
+DIAGRAMS["DIAGRAMSLOTOVERVIEW"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 360" role="img" aria-label="DeepSeek-V3 xếp chồng 61 lớp: embedding, 3 lớp dense, 58 lớp MoE, output head; phóng to một lớp MoE thấy khối MLA và khối MoE-FFN">
+  <text x="34" y="26" font-size="15" font-weight="700" class="dg-ink">Mô hình xếp chồng 61 lớp</text>
+  <rect x="34" y="42" width="272" height="44" rx="9" class="dg-box"></rect>
+  <text x="170" y="63" text-anchor="middle" font-size="13.5" class="dg-ink">Token đầu vào → Embedding</text>
+  <text x="170" y="78" text-anchor="middle" font-size="11" class="dg-muted">vocab 128K</text>
+  <line x1="170" y1="86" x2="170" y2="100" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="34" y="102" width="272" height="44" rx="9" class="dg-box"></rect>
+  <text x="170" y="123" text-anchor="middle" font-size="13.5" class="dg-ink">3 × lớp Dense</text>
+  <text x="170" y="138" text-anchor="middle" font-size="11" class="dg-muted">FFN thường ở các lớp đầu</text>
+  <line x1="170" y1="146" x2="170" y2="160" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="34" y="162" width="272" height="96" rx="9" class="dg-accent-soft"></rect>
+  <text x="170" y="188" text-anchor="middle" font-size="15" font-weight="700" class="dg-accent">58 × lớp MoE</text>
+  <text x="170" y="210" text-anchor="middle" font-size="11.5" class="dg-muted">MLA (attention) + MoE-FFN</text>
+  <text x="170" y="228" text-anchor="middle" font-size="11.5" class="dg-muted">router chọn 8 / 256 expert + 1 shared</text>
+  <text x="170" y="247" text-anchor="middle" font-size="11" class="dg-muted">phần lớn 671B tham số nằm ở đây</text>
+  <line x1="170" y1="258" x2="170" y2="272" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="34" y="274" width="272" height="44" rx="9" class="dg-box"></rect>
+  <text x="170" y="295" text-anchor="middle" font-size="13.5" class="dg-ink">Output Head</text>
+  <text x="170" y="310" text-anchor="middle" font-size="11" class="dg-muted">dự đoán token kế tiếp</text>
+  <path d="M306 210 C 344 210, 348 150, 388 150" class="dg-flow-dim" marker-end="url(#dgAr)"></path>
+  <text x="322" y="120" font-size="10.5" class="dg-faint">phóng to →</text>
+  <text x="392" y="26" font-size="15" font-weight="700" class="dg-ink">Bên trong một lớp MoE</text>
+  <rect x="388" y="42" width="338" height="290" rx="12" class="dg-zoom"></rect>
+  <text x="557" y="68" text-anchor="middle" font-size="12" class="dg-muted">đầu vào h_t</text>
+  <line x1="557" y1="74" x2="557" y2="90" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="414" y="92" width="286" height="58" rx="9" class="dg-accent-soft"></rect>
+  <text x="557" y="116" text-anchor="middle" font-size="14" font-weight="650" class="dg-accent">MLA — Attention</text>
+  <text x="557" y="135" text-anchor="middle" font-size="11" class="dg-muted">nén KV cache (mục 2)</text>
+  <line x1="557" y1="150" x2="557" y2="176" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="414" y="178" width="286" height="64" rx="9" class="dg-accent-soft"></rect>
+  <text x="557" y="202" text-anchor="middle" font-size="14" font-weight="650" class="dg-accent">MoE-FFN</text>
+  <text x="557" y="221" text-anchor="middle" font-size="11" class="dg-muted">Router → 8/256 expert + 1 shared</text>
+  <text x="557" y="236" text-anchor="middle" font-size="11" class="dg-muted">(mục 1 và 3)</text>
+  <line x1="557" y1="242" x2="557" y2="266" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <text x="557" y="284" text-anchor="middle" font-size="12" class="dg-muted">đầu ra → lớp tiếp theo</text>
+  <text x="557" y="308" text-anchor="middle" font-size="10.5" class="dg-faint">mỗi khối có RMSNorm + kết nối residual</text>
+</svg>
+<figcaption><strong>Bản đồ tổng thể.</strong> DeepSeek-V3 là một chồng 61 lớp Transformer: 3 lớp đầu dense, 58 lớp sau là MoE. Mỗi lớp MoE gồm hai khối — <strong>MLA</strong> lo attention (nén KV cache) và <strong>MoE-FFN</strong> lo feed-forward (router chọn vài expert). Các mục sau mổ xẻ từng khối.</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTMOE"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 326" role="img" aria-label="So sánh Dense và MoE: dense cho mọi token đi qua một FFN khổng lồ, MoE cho router chọn vài expert nhỏ cộng một shared expert">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-ink">Dense 671B</text>
+  <text x="30" y="44" font-size="11" class="dg-muted">mỗi token chạy toàn bộ tham số</text>
+  <rect x="92" y="58" width="150" height="32" rx="8" class="dg-box"></rect>
+  <text x="167" y="78" text-anchor="middle" font-size="12.5" class="dg-ink">Token</text>
+  <line x1="167" y1="90" x2="167" y2="106" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="62" y="108" width="210" height="120" rx="10" class="dg-warn-soft"></rect>
+  <text x="167" y="158" text-anchor="middle" font-size="14" font-weight="650" class="dg-warn">FFN khổng lồ</text>
+  <text x="167" y="180" text-anchor="middle" font-size="11.5" class="dg-muted">toàn bộ 671B đều chạy</text>
+  <text x="167" y="198" text-anchor="middle" font-size="11.5" class="dg-muted">cho MỖI token</text>
+  <line x1="167" y1="228" x2="167" y2="244" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="92" y="246" width="150" height="30" rx="8" class="dg-box"></rect>
+  <text x="167" y="265" text-anchor="middle" font-size="12.5" class="dg-ink">Đầu ra</text>
+  <text x="167" y="300" text-anchor="middle" font-size="12" font-weight="650" class="dg-warn">compute / token ∝ 671B  (đắt)</text>
+  <line x1="372" y1="40" x2="372" y2="300" class="dg-line-dash"></line>
+  <text x="430" y="26" font-size="14.5" font-weight="700" class="dg-ink">MoE thưa — DeepSeek-V3</text>
+  <text x="430" y="44" font-size="11" class="dg-muted">router chỉ gọi vài expert phù hợp</text>
+  <rect x="556" y="58" width="120" height="32" rx="8" class="dg-box"></rect>
+  <text x="616" y="78" text-anchor="middle" font-size="12.5" class="dg-ink">Token</text>
+  <line x1="616" y1="90" x2="616" y2="104" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="556" y="106" width="120" height="30" rx="8" class="dg-accent"></rect>
+  <text x="616" y="125" text-anchor="middle" font-size="12.5" font-weight="650" class="dg-on">Router</text>
+  <rect x="410" y="156" width="92" height="58" rx="9" class="dg-good-soft"></rect>
+  <text x="456" y="180" text-anchor="middle" font-size="12" font-weight="650" class="dg-good">Shared</text>
+  <text x="456" y="197" text-anchor="middle" font-size="10.5" class="dg-muted">luôn chạy</text>
+  <text x="609" y="150" text-anchor="middle" font-size="10.5" class="dg-muted">256 routed expert · chọn 8</text>
+  <rect x="522" y="158" width="30" height="26" rx="5" class="dg-accent"></rect>
+  <rect x="558" y="158" width="30" height="26" rx="5" class="dg-box"></rect>
+  <rect x="594" y="158" width="30" height="26" rx="5" class="dg-accent"></rect>
+  <rect x="630" y="158" width="30" height="26" rx="5" class="dg-box"></rect>
+  <rect x="666" y="158" width="30" height="26" rx="5" class="dg-box"></rect>
+  <rect x="522" y="188" width="30" height="26" rx="5" class="dg-box"></rect>
+  <rect x="558" y="188" width="30" height="26" rx="5" class="dg-accent"></rect>
+  <rect x="594" y="188" width="30" height="26" rx="5" class="dg-box"></rect>
+  <rect x="630" y="188" width="30" height="26" rx="5" class="dg-box"></rect>
+  <rect x="666" y="188" width="30" height="26" rx="5" class="dg-box"></rect>
+  <line x1="600" y1="136" x2="560" y2="154" class="dg-flow-accent" marker-end="url(#dgArA)"></line>
+  <line x1="632" y1="136" x2="632" y2="154" class="dg-flow-accent" marker-end="url(#dgArA)"></line>
+  <path d="M560 80 C 470 96, 456 116, 456 154" class="dg-flow" marker-end="url(#dgAr)"></path>
+  <line x1="556" y1="227" x2="556" y2="244" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="486" y="246" width="150" height="30" rx="8" class="dg-box"></rect>
+  <text x="561" y="265" text-anchor="middle" font-size="12.5" class="dg-ink">Tổng hợp → đầu ra</text>
+  <text x="561" y="300" text-anchor="middle" font-size="12" font-weight="650" class="dg-good">compute / token ∝ 37B  (rẻ hơn nhiều)</text>
+</svg>
+<figcaption><strong>Vì sao 671B mà chỉ tốn như 37B.</strong> Dense bắt mọi token đi qua một FFN khổng lồ. MoE thay nó bằng nhiều expert nhỏ: một <strong>router</strong> chỉ kích hoạt 8/256 expert (ô tô đậm) cộng 1 shared expert luôn chạy. Kho tri thức vẫn là 671B, nhưng compute mỗi token chỉ cỡ 37B.</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTMLAFLOW"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 300" role="img" aria-label="Luồng MLA: hidden state nén xuống vector c_KV 512 chiều và nhánh RoPE k_R 64 chiều; chỉ hai thứ này được lưu cache, khi cần mới giải nén ra K và V">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-ink">MLA: nén thứ phải lưu cache</text>
+  <rect x="24" y="120" width="78" height="58" rx="9" class="dg-box"></rect>
+  <text x="63" y="146" text-anchor="middle" font-size="13" class="dg-ink">h_t</text>
+  <text x="63" y="163" text-anchor="middle" font-size="10" class="dg-muted">7168 chiều</text>
+  <line x1="102" y1="132" x2="150" y2="96" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <line x1="102" y1="166" x2="150" y2="210" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="152" y="74" width="78" height="40" rx="8" class="dg-box"></rect>
+  <text x="191" y="92" text-anchor="middle" font-size="12" class="dg-ink">W_DKV</text>
+  <text x="191" y="107" text-anchor="middle" font-size="9.5" class="dg-muted">nén</text>
+  <rect x="152" y="192" width="60" height="38" rx="8" class="dg-box"></rect>
+  <text x="182" y="216" text-anchor="middle" font-size="12" class="dg-ink">W_KR</text>
+  <rect x="224" y="192" width="60" height="38" rx="8" class="dg-box"></rect>
+  <text x="254" y="216" text-anchor="middle" font-size="11.5" class="dg-ink">RoPE</text>
+  <line x1="212" y1="211" x2="222" y2="211" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <line x1="230" y1="94" x2="296" y2="94" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <line x1="284" y1="211" x2="306" y2="211" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="276" y="56" width="240" height="172" rx="12" class="dg-zoom"></rect>
+  <text x="396" y="48" text-anchor="middle" font-size="12" font-weight="700" class="dg-accent">CHỈ LƯU CACHE 2 vector này</text>
+  <rect x="300" y="74" width="180" height="44" rx="9" class="dg-accent-soft"></rect>
+  <text x="390" y="92" text-anchor="middle" font-size="13" font-weight="650" class="dg-accent">c_KV  (512)</text>
+  <text x="390" y="108" text-anchor="middle" font-size="10" class="dg-muted">nội dung K và V, đã nén</text>
+  <rect x="308" y="190" width="164" height="42" rx="9" class="dg-accent-soft"></rect>
+  <text x="390" y="208" text-anchor="middle" font-size="13" font-weight="650" class="dg-accent">k_R  (64)</text>
+  <text x="390" y="223" text-anchor="middle" font-size="10" class="dg-muted">nhánh vị trí (RoPE) tách riêng</text>
+  <line x1="480" y1="96" x2="556" y2="96" class="dg-flow-dim" marker-end="url(#dgAr)"></line>
+  <text x="518" y="86" text-anchor="middle" font-size="10" class="dg-faint">giải nén</text>
+  <text x="518" y="113" text-anchor="middle" font-size="9.5" class="dg-faint">khi cần</text>
+  <rect x="558" y="74" width="86" height="44" rx="8" class="dg-box"></rect>
+  <text x="601" y="92" text-anchor="middle" font-size="11.5" class="dg-ink">W_UK, W_UV</text>
+  <text x="601" y="107" text-anchor="middle" font-size="9.5" class="dg-muted">bung lại</text>
+  <line x1="644" y1="96" x2="666" y2="96" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="668" y="74" width="74" height="44" rx="8" class="dg-good-soft"></rect>
+  <text x="705" y="98" text-anchor="middle" font-size="12.5" font-weight="650" class="dg-good">K, V</text>
+  <text x="705" y="113" text-anchor="middle" font-size="9.5" class="dg-muted">đầy đủ</text>
+  <path d="M472 211 C 560 211, 600 150, 668 124" class="dg-flow-accent" marker-end="url(#dgArA)"></path>
+  <text x="612" y="200" text-anchor="middle" font-size="10.5" class="dg-muted">ghép k = [K ; k_R]</text>
+</svg>
+<figcaption><strong>Nén KV cache mà không vứt thông tin.</strong> Thay vì lưu K, V đầy đủ, MLA chỉ cache vector nén <code>c_KV</code> (512) và nhánh vị trí <code>k_R</code> (64). Khi tính attention mới giải nén ra K, V. Nhánh RoPE tách riêng để phép nén không bị dính vị trí — đó là lý do MLA giữ được chất lượng gần MHA.</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTMLABAR"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 226" role="img" aria-label="So sánh kích thước KV cache mỗi token mỗi lớp: MHA cần 32768 phần tử, MLA chỉ 576 phần tử, nhỏ hơn khoảng 56.9 lần">
+  <text x="30" y="28" font-size="14.5" font-weight="700" class="dg-ink">KV cache mỗi token, mỗi lớp</text>
+  <text x="34" y="76" font-size="13" font-weight="650" class="dg-ink">MHA</text>
+  <rect x="96" y="58" width="600" height="34" rx="6" class="dg-warn-soft"></rect>
+  <text x="686" y="80" text-anchor="end" font-size="13" font-weight="700" class="dg-warn dg-mono">32 768</text>
+  <text x="106" y="80" font-size="11" class="dg-muted">K đầy đủ + V đầy đủ</text>
+  <text x="34" y="138" font-size="13" font-weight="650" class="dg-ink">MLA</text>
+  <rect x="96" y="120" width="11" height="34" rx="3" class="dg-good"></rect>
+  <text x="116" y="142" font-size="13" font-weight="700" class="dg-good dg-mono">576</text>
+  <text x="168" y="142" font-size="11" class="dg-muted">c_KV (512) + k_R (64)</text>
+  <rect x="300" y="120" width="170" height="34" rx="8" class="dg-accent-soft"></rect>
+  <text x="385" y="142" text-anchor="middle" font-size="14" font-weight="700" class="dg-accent">≈ 56.9× nhỏ hơn</text>
+  <line x1="96" y1="182" x2="696" y2="182" class="dg-line"></line>
+  <text x="30" y="208" font-size="12" class="dg-muted">Với 128K context, 61 lớp, BF16: &#160; MHA ≈ <tspan font-weight="700" class="dg-warn">512 GB</tspan> &#160; → &#160; MLA ≈ <tspan font-weight="700" class="dg-good">9 GB</tspan></text>
+</svg>
+<figcaption><strong>Con số biết nói.</strong> Cùng một token, cùng một lớp: MHA phải lưu 32 768 phần tử, MLA chỉ 576. Khoảng cách ~56.9× đó nhân lên 128K token × 61 lớp thành chênh lệch giữa <strong>512 GB</strong> và <strong>9 GB</strong> — ranh giới giữa "bất khả thi" và "chạy được".</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTGATE"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 304" role="img" aria-label="Router chấm điểm 6 expert bằng sigmoid rồi chọn top-2 điểm cao nhất, chuẩn hoá thành trọng số, cộng thêm shared expert">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-ink">Router chọn expert (ví dụ 6 expert, top-2)</text>
+  <rect x="20" y="120" width="96" height="56" rx="10" class="dg-box"></rect>
+  <text x="68" y="145" text-anchor="middle" font-size="13" class="dg-ink">Token</text>
+  <text x="68" y="163" text-anchor="middle" font-size="12" class="dg-ink dg-mono">u_t</text>
+  <text x="150" y="52" font-size="11" class="dg-muted">điểm hợp s = Sigmoid(u·e), từng expert độc lập</text>
+  <line x1="116" y1="148" x2="170" y2="74" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <line x1="116" y1="148" x2="170" y2="232" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="172" y="62" width="152" height="20" rx="5" class="dg-accent"></rect>
+  <text x="158" y="77" text-anchor="end" font-size="11.5" class="dg-ink">E1</text>
+  <text x="338" y="77" font-size="11.5" font-weight="700" class="dg-accent dg-mono">0.80</text>
+  <rect x="392" y="62" width="58" height="20" rx="6" class="dg-accent-soft"></rect>
+  <text x="421" y="77" text-anchor="middle" font-size="10.5" font-weight="650" class="dg-accent">top-2</text>
+  <rect x="172" y="90" width="19" height="20" rx="5" class="dg-box"></rect>
+  <text x="158" y="105" text-anchor="end" font-size="11.5" class="dg-muted">E2</text>
+  <text x="338" y="105" font-size="11.5" class="dg-muted dg-mono">0.10</text>
+  <rect x="172" y="118" width="114" height="20" rx="5" class="dg-box"></rect>
+  <text x="158" y="133" text-anchor="end" font-size="11.5" class="dg-muted">E3</text>
+  <text x="338" y="133" font-size="11.5" class="dg-muted dg-mono">0.60</text>
+  <rect x="172" y="146" width="57" height="20" rx="5" class="dg-box"></rect>
+  <text x="158" y="161" text-anchor="end" font-size="11.5" class="dg-muted">E4</text>
+  <text x="338" y="161" font-size="11.5" class="dg-muted dg-mono">0.30</text>
+  <rect x="172" y="174" width="133" height="20" rx="5" class="dg-accent"></rect>
+  <text x="158" y="189" text-anchor="end" font-size="11.5" class="dg-ink">E5</text>
+  <text x="338" y="189" font-size="11.5" font-weight="700" class="dg-accent dg-mono">0.70</text>
+  <rect x="392" y="174" width="58" height="20" rx="6" class="dg-accent-soft"></rect>
+  <text x="421" y="189" text-anchor="middle" font-size="10.5" font-weight="650" class="dg-accent">top-2</text>
+  <rect x="172" y="202" width="38" height="20" rx="5" class="dg-box"></rect>
+  <text x="158" y="217" text-anchor="end" font-size="11.5" class="dg-muted">E6</text>
+  <text x="338" y="217" font-size="11.5" class="dg-muted dg-mono">0.20</text>
+  <line x1="500" y1="128" x2="540" y2="128" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="540" y="66" width="196" height="120" rx="12" class="dg-zoom"></rect>
+  <text x="638" y="90" text-anchor="middle" font-size="12" font-weight="700" class="dg-ink">Chuẩn hoá top-2</text>
+  <text x="638" y="116" text-anchor="middle" font-size="12.5" class="dg-accent dg-mono">g1 = 0.8/1.5 = 0.533</text>
+  <text x="638" y="140" text-anchor="middle" font-size="12.5" class="dg-accent dg-mono">g5 = 0.7/1.5 = 0.467</text>
+  <text x="638" y="168" text-anchor="middle" font-size="10.5" class="dg-muted">+ shared expert (luôn chạy)</text>
+  <line x1="638" y1="186" x2="638" y2="214" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="556" y="216" width="164" height="32" rx="8" class="dg-good-soft"></rect>
+  <text x="638" y="237" text-anchor="middle" font-size="12.5" font-weight="650" class="dg-good">Tổng hợp đầu ra</text>
+  <text x="30" y="284" font-size="11.5" class="dg-muted">Sigmoid cho điểm độc lập (token có thể hợp nhiều expert); top-K mới cắt còn vài expert để giữ tính thưa.</text>
+</svg>
+<figcaption><strong>Định tuyến token.</strong> Router chấm điểm độ hợp giữa token và từng expert bằng <em>sigmoid</em> (độc lập, không ép cạnh tranh như softmax), chọn 2 điểm cao nhất, chuẩn hoá thành trọng số tổng bằng 1, rồi cộng đóng góp của shared expert. Đây là cơ chế "gọi đúng chuyên gia" của MoE.</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTBIAS"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 296" role="img" aria-label="Cân bằng tải bằng bias: expert quá tải bị giảm bias, expert thiếu tải được tăng bias; bias chỉ ảnh hưởng bước chọn chứ không đổi trọng số output">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-ink">Cân bằng tải bằng bias (ngoài gradient)</text>
+  <line x1="60" y1="210" x2="430" y2="210" class="dg-line"></line>
+  <line x1="60" y1="130" x2="430" y2="130" class="dg-line-dash"></line>
+  <text x="426" y="123" text-anchor="end" font-size="10.5" class="dg-muted">mục tiêu 33%</text>
+  <rect x="86" y="90" width="74" height="120" rx="7" class="dg-warn-soft"></rect>
+  <text x="123" y="150" text-anchor="middle" font-size="14" font-weight="700" class="dg-warn">50%</text>
+  <text x="123" y="228" text-anchor="middle" font-size="12.5" font-weight="650" class="dg-ink">A</text>
+  <text x="123" y="246" text-anchor="middle" font-size="11" class="dg-warn">quá tải</text>
+  <rect x="208" y="138" width="74" height="72" rx="7" class="dg-box"></rect>
+  <text x="245" y="176" text-anchor="middle" font-size="14" font-weight="700" class="dg-ink">30%</text>
+  <text x="245" y="228" text-anchor="middle" font-size="12.5" font-weight="650" class="dg-ink">B</text>
+  <text x="245" y="246" text-anchor="middle" font-size="11" class="dg-muted">hơi thiếu</text>
+  <rect x="330" y="162" width="74" height="48" rx="7" class="dg-cool-soft"></rect>
+  <text x="367" y="192" text-anchor="middle" font-size="14" font-weight="700" class="dg-cool">20%</text>
+  <text x="367" y="228" text-anchor="middle" font-size="12.5" font-weight="650" class="dg-ink">C</text>
+  <text x="367" y="246" text-anchor="middle" font-size="11" class="dg-cool">thiếu tải</text>
+  <text x="123" y="270" text-anchor="middle" font-size="12" font-weight="650" class="dg-warn dg-mono">b ← b − γ ↓</text>
+  <text x="245" y="270" text-anchor="middle" font-size="12" font-weight="650" class="dg-good dg-mono">b ← b + γ ↑</text>
+  <text x="367" y="270" text-anchor="middle" font-size="12" font-weight="650" class="dg-good dg-mono">b ← b + γ ↑</text>
+  <rect x="476" y="74" width="262" height="150" rx="12" class="dg-accent-soft"></rect>
+  <text x="607" y="104" text-anchor="middle" font-size="13" font-weight="700" class="dg-accent">Điểm mấu chốt</text>
+  <text x="494" y="134" font-size="12" class="dg-ink">Chọn top-K theo &#160;<tspan font-weight="700" class="dg-accent dg-mono">s + b</tspan></text>
+  <text x="494" y="158" font-size="12" class="dg-ink">Trọng số output vẫn dùng &#160;<tspan font-weight="700" class="dg-accent dg-mono">s</tspan> gốc</text>
+  <text x="494" y="188" font-size="11.5" class="dg-muted">→ bias chỉ điều phối giao thông,</text>
+  <text x="494" y="206" font-size="11.5" class="dg-muted">không bóp méo chuyên môn expert.</text>
+</svg>
+<figcaption><strong>Điều tiết mà không phá router.</strong> Mỗi bước, expert quá tải bị trừ bias, expert thiếu tải được cộng bias, kéo tải về mốc ~33%. Mẹo quan trọng: bias <strong>chỉ</strong> tác động lúc <em>chọn</em> (<code>s + b</code>); khi đã chọn, đóng góp vẫn tính theo <code>s</code> gốc — nên cân bằng tải không trộn vào gradient học ngôn ngữ như auxiliary loss kiểu cũ.</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTMTP"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 272" role="img" aria-label="MTP: mô hình chính dự đoán token kế tiếp, module MTP nối tiếp nhận biểu diễn của mô hình chính cộng embedding token kế tiếp để dự đoán thêm token xa hơn; khi suy luận có thể bỏ module MTP">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-ink">MTP — thêm tín hiệu học, bỏ được khi suy luận</text>
+  <rect x="40" y="120" width="210" height="64" rx="10" class="dg-accent-soft"></rect>
+  <text x="145" y="150" text-anchor="middle" font-size="13.5" font-weight="650" class="dg-accent">Mô hình chính</text>
+  <text x="145" y="168" text-anchor="middle" font-size="10.5" class="dg-muted">61 lớp Transformer</text>
+  <line x1="145" y1="120" x2="145" y2="92" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="60" y="56" width="170" height="34" rx="8" class="dg-box"></rect>
+  <text x="145" y="78" text-anchor="middle" font-size="12" class="dg-ink">dự đoán t(i+1) · loss chính</text>
+  <line x1="250" y1="152" x2="338" y2="152" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <text x="294" y="143" text-anchor="middle" font-size="10.5" class="dg-muted">h_i</text>
+  <rect x="330" y="44" width="408" height="200" rx="12" class="dg-zoom"></rect>
+  <text x="534" y="68" text-anchor="middle" font-size="12" font-weight="700" class="dg-faint">Module MTP (D = 1) — bỏ khi suy luận</text>
+  <rect x="352" y="120" width="200" height="64" rx="10" class="dg-box"></rect>
+  <text x="452" y="150" text-anchor="middle" font-size="13" font-weight="650" class="dg-ink">Module MTP</text>
+  <text x="452" y="168" text-anchor="middle" font-size="10.5" class="dg-muted">ghép + chiếu + 1 lớp TRM</text>
+  <rect x="352" y="204" width="200" height="30" rx="7" class="dg-good-soft"></rect>
+  <text x="452" y="224" text-anchor="middle" font-size="11.5" class="dg-good">Emb( t(i+1) ) — nối nhân quả</text>
+  <line x1="452" y1="204" x2="452" y2="186" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <line x1="452" y1="120" x2="452" y2="92" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <rect x="362" y="56" width="180" height="34" rx="8" class="dg-box"></rect>
+  <text x="452" y="78" text-anchor="middle" font-size="12" class="dg-ink">dự đoán t(i+2) · loss ×λ</text>
+  <line x1="552" y1="152" x2="588" y2="152" class="dg-flow-dim"></line>
+  <text x="646" y="138" text-anchor="middle" font-size="10.5" class="dg-muted">Embedding &amp; OutHead</text>
+  <text x="646" y="154" text-anchor="middle" font-size="10.5" class="dg-muted">chia sẻ với model chính</text>
+  <text x="646" y="178" text-anchor="middle" font-size="10" class="dg-faint">λ: 0.3 → 0.1 (giai đoạn sau)</text>
+</svg>
+<figcaption><strong>Học dày hơn, deploy không nặng hơn.</strong> Mỗi vị trí không chỉ học token kế tiếp: module MTP nối tiếp lấy biểu diễn của mô hình chính cộng embedding token kế tiếp để đoán thêm một token nữa, tạo tín hiệu học "biết nhìn xa". Khi suy luận có thể bỏ hẳn module MTP (chi phí không tăng) hoặc dùng cho speculative decoding (~×1.8 tốc độ).</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTFP8"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 318" role="img" aria-label="So sánh lượng tử hoá per-tensor và fine-grained: per-tensor dùng một thang đo cho cả tensor nên một outlier làm hỏng giá trị nhỏ; fine-grained chia thành tile nhỏ nên outlier chỉ ảnh hưởng tile của nó">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-warn">Per-tensor (ngây thơ)</text>
+  <text x="30" y="44" font-size="11" class="dg-muted">một thang đo cho cả tensor</text>
+  <rect x="40" y="58" width="276" height="120" rx="8" class="dg-box"></rect>
+  <g font-size="11" text-anchor="middle" class="dg-muted dg-mono">
+    <text x="78" y="92">0.5</text><text x="138" y="92">0.5</text><text x="198" y="92">0.5</text><text x="258" y="92">0.5</text>
+    <text x="78" y="122">0.5</text><text x="138" y="122">0.5</text><text x="258" y="122">0.5</text>
+    <text x="78" y="152">0.5</text><text x="138" y="152">0.5</text><text x="198" y="152">0.5</text><text x="258" y="152">0.5</text>
+  </g>
+  <rect x="178" y="108" width="44" height="24" rx="5" class="dg-warn"></rect>
+  <text x="200" y="125" text-anchor="middle" font-size="11" font-weight="700" class="dg-on dg-mono">1000</text>
+  <text x="178" y="208" font-size="12" font-weight="650" class="dg-warn">1 outlier kéo thang đo cả tensor</text>
+  <text x="40" y="232" font-size="11.5" class="dg-muted">scale = 448/1000 → 0.5 thành 0.224,</text>
+  <text x="40" y="250" font-size="11.5" class="dg-muted">0.01 bị làm tròn về 0 — mất thông tin.</text>
+  <line x1="380" y1="40" x2="380" y2="296" class="dg-line-dash"></line>
+  <text x="408" y="26" font-size="14.5" font-weight="700" class="dg-good">Fine-grained (DeepSeek)</text>
+  <text x="408" y="44" font-size="11" class="dg-muted">mỗi tile có thang đo riêng</text>
+  <rect x="440" y="58" width="276" height="120" rx="8" class="dg-box"></rect>
+  <line x1="532" y1="58" x2="532" y2="178" class="dg-line"></line>
+  <line x1="624" y1="58" x2="624" y2="178" class="dg-line"></line>
+  <line x1="440" y1="118" x2="716" y2="118" class="dg-line"></line>
+  <rect x="624" y="58" width="92" height="60" rx="0" class="dg-warn-soft"></rect>
+  <g font-size="11" text-anchor="middle" class="dg-good dg-mono">
+    <text x="486" y="92">ok</text><text x="578" y="92">ok</text>
+    <text x="486" y="152">ok</text><text x="578" y="152">ok</text><text x="670" y="152">ok</text>
+  </g>
+  <rect x="648" y="76" width="44" height="24" rx="5" class="dg-warn"></rect>
+  <text x="670" y="93" text-anchor="middle" font-size="11" font-weight="700" class="dg-on dg-mono">1000</text>
+  <text x="408" y="208" font-size="12" font-weight="650" class="dg-good">outlier bị cô lập trong 1 tile</text>
+  <text x="408" y="232" font-size="11.5" class="dg-muted">Activation: tile 1×128 · Weight: 128×128.</text>
+  <text x="408" y="250" font-size="11.5" class="dg-muted">Các tile khác giữ thang đo phù hợp.</text>
+</svg>
+<figcaption><strong>Vì sao FP8 không làm sập training.</strong> FP8 nhớ "ít chữ số" nên rất nhạy với thang đo. Nếu lấy một scale cho cả tensor, một outlier sẽ nhấn chìm mọi giá trị nhỏ. DeepSeek chia tensor thành <strong>tile nhỏ</strong>, mỗi tile có scale riêng, nên outlier chỉ làm hỏng tile của nó — phần còn lại vẫn chính xác.</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTPIPE"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 234" role="img" aria-label="So sánh bong bóng pipeline: 1F1B có bubble 45, ZB1P có 15, DualPipe chỉ 7 đơn vị thời gian rảnh; minh hoạ với PP bằng 16">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-ink">Bong bóng (bubble) = thời gian GPU rảnh chờ</text>
+  <text x="30" y="44" font-size="11" class="dg-muted">cùng lượng tính toán, chỉ khác phần rảnh — minh hoạ với PP = 16</text>
+  <text x="24" y="86" font-size="12.5" font-weight="650" class="dg-ink">1F1B</text>
+  <rect x="96" y="70" width="120" height="26" rx="5" class="dg-accent"></rect>
+  <rect x="216" y="70" width="180" height="26" rx="5" class="dg-warn-soft"></rect>
+  <rect x="396" y="70" width="120" height="26" rx="5" class="dg-accent" opacity="0.5"></rect>
+  <text x="306" y="88" text-anchor="middle" font-size="11.5" font-weight="700" class="dg-warn">bubble = 45</text>
+  <text x="24" y="136" font-size="12.5" font-weight="650" class="dg-ink">ZB1P</text>
+  <rect x="96" y="120" width="120" height="26" rx="5" class="dg-accent"></rect>
+  <rect x="216" y="120" width="60" height="26" rx="5" class="dg-warn-soft"></rect>
+  <rect x="276" y="120" width="120" height="26" rx="5" class="dg-accent" opacity="0.5"></rect>
+  <text x="246" y="138" text-anchor="middle" font-size="11.5" font-weight="700" class="dg-warn">15</text>
+  <text x="24" y="186" font-size="12.5" font-weight="650" class="dg-accent">DualPipe</text>
+  <rect x="96" y="170" width="120" height="26" rx="5" class="dg-accent"></rect>
+  <rect x="216" y="170" width="28" height="26" rx="5" class="dg-good-soft"></rect>
+  <rect x="244" y="170" width="120" height="26" rx="5" class="dg-accent" opacity="0.5"></rect>
+  <text x="230" y="188" text-anchor="middle" font-size="11.5" font-weight="700" class="dg-good">7</text>
+  <rect x="556" y="70" width="22" height="14" rx="3" class="dg-accent"></rect>
+  <text x="586" y="82" font-size="11.5" class="dg-muted">tính toán</text>
+  <rect x="556" y="92" width="22" height="14" rx="3" class="dg-warn-soft"></rect>
+  <text x="586" y="104" font-size="11.5" class="dg-muted">bubble (rảnh)</text>
+  <text x="30" y="222" font-size="11.5" class="dg-muted">Pipeline hai chiều + chồng lấp giao tiếp all-to-all giúp DualPipe co phần rảnh xuống thấp nhất.</text>
+</svg>
+<figcaption><strong>Giữ cho GPU luôn có việc.</strong> Khi chia mô hình lên nhiều GPU theo pipeline, luôn có lúc GPU phải chờ (bubble). 1F1B chờ nhiều, ZB1P đỡ hơn, còn <strong>DualPipe</strong> chạy pipeline hai chiều và giấu giao tiếp sau tính toán nên phần rảnh nhỏ nhất. (Các số là minh hoạ thứ tự độ lớn, không phải đo thực.)</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTA2A"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 286" role="img" aria-label="Định tuyến all-to-all: token đi qua InfiniBand chậm giữa hai node tới GPU cùng chỉ số, rồi dùng NVLink nhanh trong node để tới GPU chứa expert">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-ink">All-to-all: "IB trước, NVLink sau"</text>
+  <rect x="30" y="70" width="300" height="150" rx="12" class="dg-box-2"></rect>
+  <text x="180" y="92" text-anchor="middle" font-size="12.5" font-weight="650" class="dg-ink">Node 0</text>
+  <rect x="430" y="70" width="300" height="150" rx="12" class="dg-box-2"></rect>
+  <text x="580" y="92" text-anchor="middle" font-size="12.5" font-weight="650" class="dg-ink">Node 1</text>
+  <g font-size="10" text-anchor="middle">
+    <rect x="50" y="104" width="58" height="42" rx="6" class="dg-box"></rect><text x="79" y="129" class="dg-muted">G0</text>
+    <rect x="116" y="104" width="58" height="42" rx="6" class="dg-box"></rect><text x="145" y="129" class="dg-muted">G1</text>
+    <rect x="182" y="104" width="58" height="42" rx="6" class="dg-box"></rect><text x="211" y="129" class="dg-muted">G2</text>
+    <rect x="248" y="104" width="58" height="42" rx="6" class="dg-accent"></rect><text x="277" y="129" class="dg-on" font-weight="700">G3</text>
+    <rect x="50" y="156" width="58" height="42" rx="6" class="dg-box"></rect><text x="79" y="181" class="dg-muted">G4</text>
+    <rect x="116" y="156" width="58" height="42" rx="6" class="dg-box"></rect><text x="145" y="181" class="dg-muted">G5</text>
+    <rect x="182" y="156" width="58" height="42" rx="6" class="dg-box"></rect><text x="211" y="181" class="dg-muted">G6</text>
+    <rect x="248" y="156" width="58" height="42" rx="6" class="dg-box"></rect><text x="277" y="181" class="dg-muted">G7</text>
+  </g>
+  <text x="277" y="100" text-anchor="middle" font-size="9.5" class="dg-accent">token ở đây</text>
+  <g font-size="10" text-anchor="middle">
+    <rect x="450" y="104" width="58" height="42" rx="6" class="dg-box"></rect><text x="479" y="129" class="dg-muted">G0</text>
+    <rect x="516" y="104" width="58" height="42" rx="6" class="dg-box"></rect><text x="545" y="129" class="dg-muted">G1</text>
+    <rect x="582" y="104" width="58" height="42" rx="6" class="dg-box"></rect><text x="611" y="129" class="dg-muted">G2</text>
+    <rect x="648" y="104" width="58" height="42" rx="6" class="dg-cool-soft"></rect><text x="677" y="129" class="dg-cool" font-weight="700">G3</text>
+    <rect x="450" y="156" width="58" height="42" rx="6" class="dg-box"></rect><text x="479" y="181" class="dg-muted">G4</text>
+    <rect x="516" y="156" width="58" height="42" rx="6" class="dg-box"></rect><text x="545" y="181" class="dg-muted">G5</text>
+    <rect x="582" y="156" width="58" height="42" rx="6" class="dg-good"></rect><text x="611" y="181" class="dg-on" font-weight="700">G6</text>
+    <rect x="648" y="156" width="58" height="42" rx="6" class="dg-box"></rect><text x="677" y="181" class="dg-muted">G7</text>
+  </g>
+  <text x="611" y="218" text-anchor="middle" font-size="9.5" class="dg-good">expert đích</text>
+  <path d="M306 122 C 360 122, 384 122, 446 124" class="dg-flow-cool" marker-end="url(#dgArC)"></path>
+  <text x="378" y="112" text-anchor="middle" font-size="10.5" font-weight="650" class="dg-cool">(1) InfiniBand 50 GB/s</text>
+  <text x="378" y="142" text-anchor="middle" font-size="9.5" class="dg-muted">tới GPU cùng chỉ số</text>
+  <path d="M677 148 C 690 154, 660 168, 642 174" class="dg-flow-accent" marker-end="url(#dgArA)"></path>
+  <text x="726" y="60" text-anchor="end" font-size="11" font-weight="650" class="dg-accent">(2) NVLink 160 GB/s</text>
+  <text x="30" y="256" font-size="12" class="dg-muted">NVLink nhanh hơn IB <tspan font-weight="700" class="dg-accent">×3.2</tspan> → chặng trong node giấu được sau chặng IB, nên đường chậm (IB) được dùng có kiểm soát.</text>
+</svg>
+<figcaption><strong>Gỡ nghẽn mạng cho MoE.</strong> Token cần một expert nằm ở node khác. Thay vì gửi lung tung, DeepSeek đẩy nó qua InfiniBand (chậm) tới GPU <em>cùng chỉ số</em> ở node đích, rồi dùng NVLink (nhanh ×3.2, trong node) chuyển tới đúng GPU chứa expert. Nhờ vậy chặng NVLink chồng lấp được sau chặng IB.</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTGRPO"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 320" role="img" aria-label="PPO cần thêm critic lớn cỡ policy; GRPO bỏ critic, lấy trung bình reward của một nhóm output làm baseline để tính advantage">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-warn">PPO (cũ)</text>
+  <rect x="30" y="68" width="150" height="58" rx="10" class="dg-accent-soft"></rect>
+  <text x="105" y="94" text-anchor="middle" font-size="13" font-weight="650" class="dg-accent">Policy</text>
+  <text x="105" y="111" text-anchor="middle" font-size="10.5" class="dg-muted">671B</text>
+  <rect x="30" y="146" width="150" height="58" rx="10" class="dg-warn-soft"></rect>
+  <text x="105" y="172" text-anchor="middle" font-size="13" font-weight="650" class="dg-warn">Critic / Value</text>
+  <text x="105" y="189" text-anchor="middle" font-size="10.5" class="dg-muted">~671B (gánh nặng)</text>
+  <text x="30" y="236" font-size="11.5" class="dg-muted">Phải nuôi thêm một model</text>
+  <text x="30" y="254" font-size="11.5" class="dg-muted">gần bằng policy chỉ để ước</text>
+  <text x="30" y="272" font-size="11.5" class="dg-muted">lượng baseline.</text>
+  <line x1="226" y1="50" x2="226" y2="300" class="dg-line-dash"></line>
+  <text x="262" y="26" font-size="14.5" font-weight="700" class="dg-good">GRPO (DeepSeek-V3)</text>
+  <rect x="262" y="58" width="150" height="44" rx="9" class="dg-accent-soft"></rect>
+  <text x="337" y="85" text-anchor="middle" font-size="12.5" font-weight="650" class="dg-accent">Policy → lấy mẫu G=4</text>
+  <line x1="337" y1="102" x2="337" y2="118" class="dg-flow" marker-end="url(#dgAr)"></line>
+  <line x1="470" y1="246" x2="700" y2="246" class="dg-line"></line>
+  <line x1="470" y1="186" x2="700" y2="186" class="dg-line-dash"></line>
+  <text x="406" y="181" text-anchor="middle" font-size="11" class="dg-muted">mean(r) = 0.6</text>
+  <text x="406" y="197" text-anchor="middle" font-size="10" class="dg-faint">(baseline)</text>
+  <text x="588" y="138" text-anchor="middle" font-size="11" class="dg-muted">reward mỗi output, so với trung bình nhóm = baseline</text>
+  <rect x="486" y="156" width="40" height="90" rx="5" class="dg-good"></rect>
+  <text x="506" y="172" text-anchor="middle" font-size="10.5" class="dg-on dg-mono">0.9</text>
+  <text x="506" y="266" text-anchor="middle" font-size="10.5" class="dg-good" font-weight="700">+1.10</text>
+  <rect x="546" y="226" width="40" height="20" rx="5" class="dg-warn-soft"></rect>
+  <text x="566" y="172" text-anchor="middle" font-size="10.5" class="dg-muted dg-mono">0.2</text>
+  <text x="566" y="266" text-anchor="middle" font-size="10.5" class="dg-warn" font-weight="700">−1.46</text>
+  <rect x="606" y="196" width="40" height="50" rx="5" class="dg-box"></rect>
+  <text x="626" y="172" text-anchor="middle" font-size="10.5" class="dg-muted dg-mono">0.5</text>
+  <text x="626" y="266" text-anchor="middle" font-size="10.5" class="dg-warn" font-weight="700">−0.37</text>
+  <rect x="666" y="166" width="40" height="80" rx="5" class="dg-good"></rect>
+  <text x="686" y="172" text-anchor="middle" font-size="10.5" class="dg-on dg-mono">0.8</text>
+  <text x="686" y="266" text-anchor="middle" font-size="10.5" class="dg-good" font-weight="700">+0.73</text>
+  <text x="262" y="300" font-size="11.5" class="dg-good">Không cần critic — nhóm tự làm baseline. Advantage = (r − mean) / std.</text>
+</svg>
+<figcaption><strong>Bỏ critic khổng lồ.</strong> PPO cần một value model gần bằng policy 671B. GRPO lấy mẫu một <strong>nhóm</strong> output cho cùng câu hỏi, dùng <em>trung bình reward của nhóm</em> làm baseline: output trên trung bình được đẩy mạnh (advantage dương), dưới trung bình bị giảm. Rẻ hơn nhiều mà vẫn có tín hiệu học tốt-xấu tương đối.</figcaption>
+</figure>'''
+
+DIAGRAMS["DIAGRAMSLOTYARN"] = r'''<figure class="diagram">
+<svg viewBox="0 0 760 224" role="img" aria-label="Mở rộng context theo hai giai đoạn bằng YaRN: từ 4K lên 32K rồi lên 128K, mỗi giai đoạn 1000 step, chỉ chỉnh nhánh RoPE k_R">
+  <text x="30" y="26" font-size="14.5" font-weight="700" class="dg-ink">Mở context 4K → 128K theo giai đoạn</text>
+  <rect x="40" y="58" width="70" height="30" rx="6" class="dg-box"></rect>
+  <text x="75" y="78" text-anchor="middle" font-size="12" font-weight="650" class="dg-ink">4K</text>
+  <text x="120" y="78" font-size="10.5" class="dg-muted">pre-train</text>
+  <line x1="75" y1="88" x2="75" y2="108" class="dg-flow-accent" marker-end="url(#dgArA)"></line>
+  <text x="92" y="104" font-size="10.5" font-weight="650" class="dg-accent">YaRN</text>
+  <rect x="40" y="110" width="220" height="30" rx="6" class="dg-accent-soft"></rect>
+  <text x="60" y="130" font-size="12" font-weight="650" class="dg-accent">32K</text>
+  <text x="270" y="130" font-size="10.5" class="dg-muted">giai đoạn 1 · 1000 step · batch 1920</text>
+  <line x1="75" y1="140" x2="75" y2="160" class="dg-flow-accent" marker-end="url(#dgArA)"></line>
+  <text x="92" y="156" font-size="10.5" font-weight="650" class="dg-accent">YaRN</text>
+  <rect x="40" y="162" width="420" height="30" rx="6" class="dg-accent"></rect>
+  <text x="60" y="182" font-size="12" font-weight="700" class="dg-on">128K</text>
+  <text x="470" y="182" font-size="10.5" class="dg-muted">giai đoạn 2 · 1000 step · batch 480</text>
+  <rect x="540" y="58" width="198" height="100" rx="12" class="dg-zoom"></rect>
+  <text x="639" y="84" text-anchor="middle" font-size="11.5" font-weight="700" class="dg-ink">Vì sao "sạch"</text>
+  <text x="639" y="108" text-anchor="middle" font-size="11" class="dg-muted">YaRN chỉ chỉnh nhánh</text>
+  <text x="639" y="124" text-anchor="middle" font-size="11.5" font-weight="650" class="dg-accent dg-mono">RoPE k_R</text>
+  <text x="639" y="146" text-anchor="middle" font-size="10.5" class="dg-muted">không đụng K, V nội dung</text>
+  <text x="30" y="214" font-size="11.5" class="dg-muted">Kiểm tra Needle-in-a-Haystack: truy hồi tốt trên toàn dải tới 128K — context dài là thật, không chỉ là thông số.</text>
+</svg>
+<figcaption><strong>Dạy mô hình "với xa" hơn.</strong> Tăng giới hạn input không đủ; mô hình phải học dùng vị trí xa. DeepSeek mở context hai bước (4K→32K→128K), mỗi bước 1000 step, dùng YaRN nội/ngoại suy tần số RoPE. Vì MLA đã tách vị trí ra nhánh <code>k_R</code>, YaRN chỉ cần chỉnh đúng nhánh đó.</figcaption>
+</figure>'''
 
 
 def render_markdown_preserving_math(markdown_text: str) -> str:
@@ -802,6 +1270,16 @@ def build_page() -> str:
     )
 
     article_html = str(soup)
+
+    # Chèn sơ đồ SAU BeautifulSoup: parser HTML hạ thấp camelCase (viewBox →
+    # viewbox) làm hỏng SVG, nên ta thay placeholder bằng SVG ở bước này.
+    article_html = ARROW_DEFS + "\n" + article_html
+    for token, figure in DIAGRAMS.items():
+        target = f"<p>{token}</p>"
+        if target not in article_html:
+            raise SystemExit(f"Không tìm thấy placeholder sơ đồ: {token}")
+        article_html = article_html.replace(target, figure)
+
     section_count = len(h2s)
     h3_count = len(soup.find_all("h3"))
     table_count = len(soup.find_all("table"))
@@ -874,7 +1352,7 @@ def build_page() -> str:
 
       <div class="note">
         <svg class="note-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div><strong>Đây là bản viết lại phần giải thích, không chỉ convert Markdown.</strong> Trang gồm {section_count} phần chính, {h3_count} mục con, {table_count} bảng và {math_count // 2} khối công thức. Công thức LaTeX được bảo vệ trước khi render để Markdown không làm hỏng.</div>
+        <div><strong>Đây là bản viết lại phần giải thích, không chỉ convert Markdown.</strong> Trang gồm {section_count} phần chính, {h3_count} mục con, {len(DIAGRAMS)} sơ đồ minh hoạ, {table_count} bảng và {math_count // 2} khối công thức. Sơ đồ vẽ bằng SVG và tự đổi màu theo giao diện sáng/tối; công thức LaTeX được bảo vệ trước khi render để Markdown không làm hỏng.</div>
       </div>
 
       <div class="mobile-outline">
@@ -941,6 +1419,12 @@ CSS = r"""
       --radius-sm: 8px;
       --maxw: 1200px;
       --content: 768px;
+      --d-warn: #d97706;
+      --d-warn-soft: #fdf1e3;
+      --d-good: #0f9d6b;
+      --d-good-soft: #e6f6ef;
+      --d-cool: #2563eb;
+      --d-cool-soft: #e7effe;
     }
 
     [data-theme="dark"] {
@@ -963,6 +1447,12 @@ CSS = r"""
       --code-ink: #e3e3ec;
       --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
       --shadow: 0 8px 40px -12px rgba(0, 0, 0, .6);
+      --d-warn: #f0a868;
+      --d-warn-soft: rgba(217, 119, 6, .18);
+      --d-good: #56cda0;
+      --d-good-soft: rgba(15, 157, 107, .20);
+      --d-cool: #6ea8fe;
+      --d-cool-soft: rgba(37, 99, 235, .22);
     }
 
     * { box-sizing: border-box; }
@@ -1289,6 +1779,63 @@ CSS = r"""
       .article h2 { break-after: avoid; }
       .article a { color: #000; border: 0; }
     }
+
+    /* ===== Sơ đồ minh hoạ (SVG vẽ tay, tự đổi màu theo theme) ===== */
+    .dg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+    figure.diagram {
+      margin: 32px 0;
+      padding: 22px 22px 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    figure.diagram > svg { width: 100%; height: auto; display: block; overflow: visible; }
+    figure.diagram figcaption {
+      margin: 16px 2px 0;
+      padding-top: 13px;
+      border-top: 1px dashed var(--line);
+      font-size: .85rem;
+      line-height: 1.58;
+      color: var(--muted);
+    }
+    figure.diagram figcaption strong { color: var(--text); font-weight: 650; }
+    figure.diagram figcaption code {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: .8em;
+      background: var(--surface-2);
+      padding: .05em .35em;
+      border-radius: 5px;
+    }
+    .diagram text { font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif; fill: var(--text); }
+    .dg-mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+    .dg-ink { fill: var(--ink); }
+    .dg-muted { fill: var(--muted); }
+    .dg-faint { fill: var(--faint); }
+    .dg-on { fill: #ffffff; }
+    .dg-box { fill: var(--surface-2); stroke: var(--line-2); stroke-width: 1.25; }
+    .dg-box-2 { fill: var(--surface-3); stroke: var(--line-2); stroke-width: 1.25; }
+    .dg-zoom { fill: var(--bg); stroke: var(--line-2); stroke-width: 1.25; stroke-dasharray: 5 4; }
+    .dg-accent { fill: var(--accent); }
+    .dg-accent-soft { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+    .dg-warn { fill: var(--d-warn); }
+    .dg-warn-soft { fill: var(--d-warn-soft); stroke: var(--d-warn); stroke-width: 1.5; }
+    .dg-good { fill: var(--d-good); }
+    .dg-good-soft { fill: var(--d-good-soft); stroke: var(--d-good); stroke-width: 1.5; }
+    .dg-cool { fill: var(--d-cool); }
+    .dg-cool-soft { fill: var(--d-cool-soft); stroke: var(--d-cool); stroke-width: 1.5; }
+    .dg-flow { fill: none; stroke: var(--muted); stroke-width: 2; }
+    .dg-flow-accent { fill: none; stroke: var(--accent); stroke-width: 2; }
+    .dg-flow-cool { fill: none; stroke: var(--d-cool); stroke-width: 2; }
+    .dg-flow-dim { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .dg-line { fill: none; stroke: var(--line-2); stroke-width: 1; }
+    .dg-line-dash { fill: none; stroke: var(--faint); stroke-width: 1.3; stroke-dasharray: 5 4; }
+    .dg-ar-muted { fill: var(--muted); }
+    .dg-ar-accent { fill: var(--accent); }
+    .dg-ar-good { fill: var(--d-good); }
+    .dg-ar-cool { fill: var(--d-cool); }
+    .dg-ar-warn { fill: var(--d-warn); }
 """
 
 
